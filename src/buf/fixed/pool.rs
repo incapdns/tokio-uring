@@ -226,11 +226,9 @@ impl<T: IoBufMut> FixedBufPool<T> {
   /// An application should not rely on any particular order
   /// in which available buffers are retrieved.
   pub fn try_next(&mut self, cap: usize) -> Option<FixedBuf> {
-    let inner = Rc::get_mut(&mut self.inner);
-
-    if inner.is_none() { return None }
-
-    inner.unwrap().try_next(cap).map(|data| {
+    let mut inner = Rc::get_mut(&mut self.inner);
+    
+    inner.as_mut()?.try_next(cap).map(|data| {
       let pool = Rc::clone(&self.inner);
       // Safety: the validity of buffer data is ensured by
       // plumbing::Pool::try_next
