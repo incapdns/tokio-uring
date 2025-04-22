@@ -106,7 +106,7 @@ fn completion_overflow() {
   let squeue_entries = 2;
   let cqueue_entries = 2 * squeue_entries;
 
-  std::thread::spawn(|| {
+  thread::spawn(|| {
     thread::sleep(time::Duration::from_secs(8)); // 1000 times longer than it takes on a slow machine
     eprintln!("Timeout reached. The uring completions are hung.");
     process::exit(1);
@@ -123,7 +123,7 @@ fn completion_overflow() {
       }
 
       while let Some(res) = js.join_next().await {
-        res.unwrap().unwrap();
+        let _ = res.unwrap().unwrap();
       }
     });
 }

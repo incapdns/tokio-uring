@@ -145,7 +145,7 @@ use std::future::Future;
 /// }
 /// ```
 pub fn start<F: Future>(future: F) -> F::Output {
-  let rt = Runtime::new().unwrap();
+  let rt = Runtime::new(&builder()).unwrap();
   rt.block_on(future)
 }
 
@@ -161,9 +161,10 @@ pub fn uring_builder() -> io_uring::Builder {
 
 /// Builder API that can create and start the `io_uring` runtime with non-default parameters,
 /// while abstracting away the underlying io_uring crate.
-// #[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Builder {
   entries: u32,
+  threads: usize,
   urb: io_uring::Builder,
 }
 
@@ -176,6 +177,7 @@ pub struct Builder {
 pub fn builder() -> Builder {
   Builder {
     entries: 256,
+    threads: std::thread::available_parallelism().unwrap().get(),
     urb: io_uring::IoUring::builder(),
   }
 }
@@ -198,6 +200,12 @@ impl Builder {
   /// Refer to the [`io_uring::Builder`] documentation for all the supported methods.
   pub fn uring_builder(&mut self, b: &io_uring::Builder) -> &mut Self {
     self.urb = b.clone();
+    self
+  }
+
+  /// Replaces the default number of worker threads
+  pub fn worker_threads(&mut self, num: usize) -> &mut Self {
+    self.threads = num;
     self
   }
 
@@ -229,7 +237,7 @@ impl Builder {
   /// }
   /// ```
   pub fn start<F: Future>(&self, future: F) -> F::Output {
-    let rt = Runtime::new().unwrap();
+    let rt = Runtime::new(self).unwrap();
     rt.block_on(future)
   }
 }

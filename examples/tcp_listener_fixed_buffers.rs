@@ -61,7 +61,7 @@ async fn echo_handler<T: IoBufMut>(
 
   // Get one of the two fixed buffers.
   // If neither is unavailable, print reason and return immediately, dropping this connection;
-  // be nice and shutdown the connection before dropping it so the client sees the connection is
+  // be nice and shutdowncomplete_ops_on_drop the connection before dropping it so the client sees the connection is
   // closed immediately.
 
   let mut fbuf = registry.check_out(0);

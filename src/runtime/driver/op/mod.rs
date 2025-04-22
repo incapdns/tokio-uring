@@ -416,11 +416,15 @@ where
   type Output = T::Output;
 
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-    self
+    let result = self
       .driver
       .upgrade()
       .expect("Not in runtime context")
-      .poll_op(self.get_mut(), cx)
+      .poll_op(self.get_mut(), cx);
+
+    CONTEXT.with(|x| x.call_on_thread_park());
+
+    result
   }
 }
 
@@ -431,11 +435,15 @@ where
   type Output = T::Output;
 
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-    self
+    let result = self
       .driver
       .upgrade()
       .expect("Not in runtime context")
-      .poll_multishot_op(self.get_mut(), cx)
+      .poll_multishot_op(self.get_mut(), cx);
+    
+    CONTEXT.with(|x| x.call_on_thread_park());
+    
+    result
   }
 }
 
@@ -446,11 +454,15 @@ where
   type Output = T::Output;
 
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-    self
+    let result = self
       .driver
       .upgrade()
       .expect("Not in runtime context")
-      .poll_op_oneshot(self.get_mut(), cx)
+      .poll_op_oneshot(self.get_mut(), cx);
+
+    CONTEXT.with(|x| x.call_on_thread_park());
+
+    result
   }
 }
 

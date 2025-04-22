@@ -3,7 +3,7 @@ use std::future::Future;
 use std::io;
 use std::mem::{ManuallyDrop, MaybeUninit};
 use std::os::fd::AsRawFd;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex};
 use tokio::io::unix::AsyncFd;
 use tokio::sync::Notify;
 use tokio::task::LocalSet;
@@ -13,6 +13,7 @@ pub(crate) mod driver;
 
 use crate::runtime::driver::Handle;
 pub(crate) use context::RuntimeContext;
+use crate::{Builder};
 
 type Context = Arc<RuntimeContext>;
 
@@ -36,10 +37,13 @@ pub struct Runtime {
   local: ManuallyDrop<LocalSet>,
 
   /// Linked List of all runtime contexts
-  contexts: Arc<RwLock<LinkedList<Context>>>,
+  contexts: Arc<Mutex<LinkedList<Context>>>,
 
-  /// Signal for new runtime context
+  /// Signal for new worker threads
   signal: Arc<Notify>,
+
+  /// Builder for runtime contexts
+  builder: Builder
 }
 
 /// Spawns a new asynchronous task, returning a [`JoinHandle`] for it.
@@ -99,23 +103,21 @@ impl Runtime {
   /// Creates a new tokio_uring runtime on the current thread.
   ///
   /// This takes the tokio-uring [`Builder`](crate::Builder) as a parameter.
-  pub fn new() -> io::Result<Runtime> {
+  pub fn new(builder: &Builder) -> io::Result<Runtime> {
     let mut runtime = Runtime {
       local: ManuallyDrop::new(LocalSet::new()),
       tokio_rt: MaybeUninit::zeroed(),
       contexts: Default::default(),
-      signal: Arc::new(Notify::new()),
+      builder: builder.clone(),
+      signal: Arc::new(Notify::new())
     };
 
     let on_thread_start = runtime.create_on_thread_start_callback();
 
     let rt = tokio::runtime::Builder::new_multi_thread()
+      .worker_threads(builder.threads)
       .on_thread_start(on_thread_start)
-      .on_thread_park(|| {
-        CONTEXT.with(|x| {
-          let _ = x.handle().flush();
-        });
-      })
+      .on_thread_park(Runtime::on_thread_park)
       .enable_all()
       .build()?;
 
@@ -125,41 +127,50 @@ impl Runtime {
 
     runtime.start_uring_wakes_task();
 
-    CONTEXT.with(|cx| {
-      let mut lock = runtime.contexts.write().unwrap();
-      lock.push_back(cx.clone());
+    CONTEXT.with(|x| {
+      x.set_handle(Handle::new(&builder).expect("Internal error"));
+      x.set_on_thread_park(Runtime::on_thread_park);
+      let mut lock = runtime.contexts.lock().unwrap();
+      lock.push_back(x.clone());
     });
+
+    runtime.signal.notify_one();
 
     Ok(runtime)
   }
 
+  fn on_thread_park(){
+    CONTEXT.with(|x| {
+      let _ = x.handle().flush();
+    });
+  }
+  
   fn create_on_thread_start_callback(&self) -> impl Fn() + Sync + 'static {
-    let is_unique = |item: &Arc<RuntimeContext>, list: LinkedList<Arc<RuntimeContext>>| {
+    let is_unique = |item: &Context, list: &LinkedList<Context>| {
       let item_fd = item.handle().as_raw_fd();
 
       !list.iter().any(|i| i.handle().as_raw_fd() == item_fd)
     };
 
     let contexts = self.contexts.clone();
-
+    let builder = self.builder.clone();
     let signal = self.signal.clone();
 
     move || {
-      let mut lock = contexts.write().unwrap();
-
       CONTEXT.with(|cx| {
         let item = cx.clone();
+        item.set_handle(Handle::new(&builder).expect("Internal error"));
 
-        if is_unique(&item, lock.clone()) {
+        let mut lock = contexts.lock().unwrap();
+        if is_unique(&item, &lock.clone()) {
           lock.push_back(cx.clone());
+          signal.notify_one();
         }
       });
-
-      signal.notify_one();
     }
   }
 
-  async fn wait_event(item: Arc<Item>) {
+  async fn wait_event(item: Item) {
     loop {
       let mut guard = item.async_fd.readable().await.unwrap();
       guard.get_inner().dispatch_completions();
@@ -167,41 +178,38 @@ impl Runtime {
     }
   }
 
-  async fn drive_uring_wakes(
-    signal: Arc<Notify>,
-    contexts: Arc<RwLock<LinkedList<Arc<RuntimeContext>>>>,
-  ) {
-    let mut our_list: Vec<Arc<Item>> = Vec::with_capacity(255);
-
-    loop {
-      let vec = {
-        let guard = contexts.read().unwrap();
-        guard.iter().cloned().collect::<Vec<_>>()
-      };
-
-      let vec_len = vec.len();
-      let our_list_len = our_list.len();
-
-      if our_list_len != vec_len {
-        vec.iter().skip(our_list_len).for_each(|rc| {
-          our_list.push(Arc::new(Item::new((*rc).clone())));
-        });
-
-        for item in our_list.iter().skip(our_list_len) {
-          tokio::spawn(Runtime::wait_event(item.clone()));
-        }
-      }
-
-      // Wait for signal
-      signal.notified().await;
-    }
-  }
-
   fn start_uring_wakes_task(&self) {
     //SAFETY: It's always already initialized on Runtime::new method
-    let _guard = unsafe { &*self.tokio_rt.as_ptr() }.enter();
-    let future = Runtime::drive_uring_wakes(self.signal.clone(), self.contexts.clone());
-    self.local.spawn_local(future);
+    let tokio_rt = unsafe { self.tokio_rt.assume_init_ref() };
+    let _guard = tokio_rt.enter();
+    self.local.spawn_local(
+      Runtime::drive_uring_wakes(
+        self.contexts.clone(),
+        self.signal.clone(),
+        self.builder.threads
+      )
+    );
+  }
+
+  async fn drive_uring_wakes(
+    contexts: Arc<Mutex<LinkedList<Context>>>,
+    signal: Arc<Notify>,
+    threads: usize
+  ) {
+    let mut total = 0;
+
+    while total != threads + 1 {
+      signal.notified().await;
+
+      let mut guard = contexts.lock().unwrap();
+      
+      for i in guard.iter() {
+        tokio::spawn(Runtime::wait_event(Item::new(i.clone())));
+        total += 1;
+      }
+
+      guard.clear();
+    }
   }
 
   /// Runs a future to completion on the tokio-uring runtime. This is the
@@ -233,9 +241,6 @@ impl Runtime {
         .block_on(self.local.run_until(std::future::poll_fn(|cx| {
           // assert!(drive.as_mut().poll(cx).is_pending());
           let result = future.as_mut().poll(cx);
-          CONTEXT.with(|x| {
-            let _ = x.handle().flush();
-          });
           result
         })))
     };
@@ -257,17 +262,18 @@ impl Drop for Runtime {
 
 #[cfg(test)]
 mod test {
+  use crate::builder;
   use super::*;
 
   #[test]
   fn block_on() {
-    let rt = Runtime::new().unwrap();
+    let rt = Runtime::new(&builder()).unwrap();
     rt.block_on(async move { () });
   }
 
   #[test]
   fn block_on_twice() {
-    let rt = Runtime::new().unwrap();
+    let rt = Runtime::new(&builder()).unwrap();
     rt.block_on(async move { () });
     rt.block_on(async move { () });
   }
