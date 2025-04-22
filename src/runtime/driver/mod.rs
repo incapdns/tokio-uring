@@ -205,7 +205,7 @@ impl Driver {
       }
       Lifecycle::CompletionList(list) => {
         // Deallocate list entries, recording if more CQE's are expected
-        let more = cqueue::more(list.into_iter().last().unwrap().flags);
+        let more = cqueue::more(list.into_iter().next_back().unwrap().flags);
 
         if more {
           // If more are expected, we have to keep the op around
@@ -240,14 +240,13 @@ impl Driver {
     Ok(op)
   }
 
-  pub(crate) fn submit_op<T: Unpin, S: Unpin, F>(
+  pub(crate) fn submit_op<T: Unpin + Completable, S: Unpin, F>(
     &self,
     mut data: T,
     f: F,
     handle: WeakHandle,
   ) -> io::Result<Pin<Box<Op<T, S>>>>
   where
-    T: Completable,
     F: FnOnce(&mut T) -> squeue::Entry,
   {
     // Configure the SQE

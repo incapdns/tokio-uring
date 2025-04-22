@@ -228,10 +228,10 @@ impl<T: IoBufMut> FixedBufPool<T> {
   pub fn try_next(&mut self, cap: usize) -> Option<FixedBuf> {
     let inner = Rc::get_mut(&mut self.inner);
 
-    if let None = inner { return None }
+    if inner.is_none() { return None }
 
     inner.unwrap().try_next(cap).map(|data| {
-      let pool = Rc::clone(&mut self.inner);
+      let pool = Rc::clone(&self.inner);
       // Safety: the validity of buffer data is ensured by
       // plumbing::Pool::try_next
       unsafe { FixedBuf::new(pool, data) }

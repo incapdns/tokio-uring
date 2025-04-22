@@ -97,7 +97,7 @@ pub struct ArcMonitorGuard<'a, T> {
   arc_monitor: &'a ArcMonitor<T>,
 }
 
-impl<'a, T> Drop for ArcMonitorGuard<'a, T> {
+impl<T> Drop for ArcMonitorGuard<'_, T> {
   fn drop(&mut self) {
     self.arc_monitor.leave();
   }
@@ -162,7 +162,7 @@ impl<T> ArcMonitor<T> {
 
     if old_uses > 0 {
       return Some(ArcMonitorGuard {
-        arc_monitor: &self,
+        arc_monitor: self,
       });
     }
 
@@ -176,7 +176,7 @@ impl<T> ArcMonitor<T> {
     }
 
     Some(ArcMonitorGuard {
-      arc_monitor: &self,
+      arc_monitor: self,
     })
   }
 
@@ -222,13 +222,10 @@ impl<T> ArcMonitor<T> {
       }
     }
 
-    let is_recycled =
-      self
-        .status
-        .compare_exchange(ArcMonitorStatus::Live, ArcMonitorStatus::Dropped, Ordering::Release, Ordering::Relaxed)
-        .is_ok();
-
-    is_recycled
+    self
+      .status
+      .compare_exchange(ArcMonitorStatus::Live, ArcMonitorStatus::Dropped, Ordering::Release, Ordering::Relaxed)
+      .is_ok()
   }
 }
 
@@ -247,18 +244,10 @@ impl<T> DerefMut for ArcMonitor<T> {
   }
 }
 
+#[derive(Default)]
 pub(crate) struct Location {
   pub(crate) address: usize,
   pub(crate) vtable: usize,
-}
-
-impl Default for Location {
-  fn default() -> Location {
-    Location {
-      address: 0,
-      vtable: 0
-    }
-  }
 }
 
 /// In-flight operation
@@ -379,7 +368,7 @@ impl<T: Unpin, CqeType: Unpin> Op<T, CqeType> {
   fn initialize(mut self: Pin<Box<Self>>) -> Pin<Box<Self>> {
     let location = ArcMonitor::<Location>::new(Default::default(), 2);
 
-    let this: *mut Self = unsafe { mem::transmute(&*self) };
+    let this = &*self as *const Op<T, CqeType> as *mut Op<T, CqeType>;
     let notifiable: *mut dyn Notifiable = this as *mut _;
 
     //SAFETY: Converting current address and vtable to a tuple

@@ -68,7 +68,7 @@ pub struct Runtime {
 ///     handle.await.unwrap();
 /// });
 /// ```
-pub fn spawn<F: Future + 'static>(task: F) -> tokio::task::JoinHandle<F::Output>
+pub fn spawn<F>(task: F) -> tokio::task::JoinHandle<F::Output>
 where F: Future + Send + 'static,
       F::Output: Send + 'static
 {
@@ -98,7 +98,7 @@ impl Runtime {
   /// Creates a new tokio_uring runtime on the current thread.
   ///
   /// This takes the tokio-uring [`Builder`](crate::Builder) as a parameter.
-  pub fn new<'a>() -> io::Result<Runtime> {
+  pub fn new() -> io::Result<Runtime> {
     let mut runtime = Runtime {
       local: ManuallyDrop::new(LocalSet::new()),
       tokio_rt: MaybeUninit::zeroed(),
@@ -138,10 +138,9 @@ impl Runtime {
     let is_unique = |item: &Arc<RuntimeContext>, list: LinkedList<Arc<RuntimeContext>>| {
       let item_fd = item.handle().as_raw_fd();
 
-      list
+      !list
         .iter()
-        .find(|i| i.handle().as_raw_fd() == item_fd)
-        .is_none()
+        .any(|i| i.handle().as_raw_fd() == item_fd)
     };
 
     let contexts = self.contexts.clone();

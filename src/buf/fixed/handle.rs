@@ -38,7 +38,7 @@ impl Drop for FixedBuf {
   fn drop(&mut self) {
     let registry = Rc::get_mut(&mut self.registry);
 
-    if let None = registry { return; }
+    if registry.is_none() { return; }
     
     let registry = registry.unwrap();
     // Safety: the length of the initialized data in the buffer has been
