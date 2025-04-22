@@ -174,9 +174,14 @@ impl Runtime {
     let mut our_list: Vec<Arc<Item>> = Vec::with_capacity(255);
 
     loop {
-      let guard = contexts.read().unwrap();
+      let vec = {
+        let guard = contexts.read().unwrap();
+        guard
+          .iter()
+          .cloned()
+          .collect::<Vec<_>>()
+      };
 
-      let vec = guard.iter().collect::<Vec<_>>();
       let vec_len = vec.len();
       let our_list_len = our_list.len();
 
