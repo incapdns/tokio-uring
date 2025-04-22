@@ -485,7 +485,7 @@ impl File {
   /// ```
   pub async fn read_fixed_at<T>(&self, buf: T, pos: u64) -> crate::BufResult<usize, T>
   where
-    T: BoundedBufMut<BufMut=FixedBuf>,
+    T: BoundedBufMut<BufMut = FixedBuf>,
   {
     // Submit the read operation
     let op = Op::read_fixed_at(&self.fd, buf, pos).unwrap();
@@ -678,7 +678,7 @@ impl File {
   /// ```
   pub async fn write_fixed_at<T>(&self, buf: T, pos: u64) -> crate::BufResult<usize, T>
   where
-    T: BoundedBuf<Buf=FixedBuf>,
+    T: BoundedBuf<Buf = FixedBuf>,
   {
     let op = Op::write_fixed_at(&self.fd, buf, pos).unwrap();
     op.await
@@ -705,7 +705,7 @@ impl File {
   /// [`write_fixed_at`]: Self::write_fixed_at
   pub async fn write_fixed_all_at<T>(&self, buf: T, pos: u64) -> crate::BufResult<(), T>
   where
-    T: BoundedBuf<Buf=FixedBuf>,
+    T: BoundedBuf<Buf = FixedBuf>,
   {
     let orig_bounds = buf.bounds();
     let (res, buf) = self.write_fixed_all_at_slice(buf.slice_full(), pos).await;

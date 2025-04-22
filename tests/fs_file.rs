@@ -331,7 +331,7 @@ async fn poll_once(future: impl std::future::Future) {
     assert!(future.as_mut().poll(cx).is_pending());
     Poll::Ready(())
   })
-    .await;
+  .await;
 }
 
 fn assert_invalid_fd(fd: RawFd) {

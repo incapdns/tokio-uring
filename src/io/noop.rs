@@ -14,7 +14,6 @@ impl Op<NoOp> {
 
     CONTEXT.with(|x| {
       x.handle()
-
         .submit_op(NoOp {}, |_| opcode::Nop::new().build())
     })
   }

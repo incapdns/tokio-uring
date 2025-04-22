@@ -1,14 +1,14 @@
 use std::{
-    io,
-    net::SocketAddr,
-    os::unix::prelude::{AsRawFd, FromRawFd, RawFd},
+  io,
+  net::SocketAddr,
+  os::unix::prelude::{AsRawFd, FromRawFd, RawFd},
 };
 
 use crate::{
-    buf::fixed::FixedBuf,
-    buf::{BoundedBuf, BoundedBufMut},
-    io::{SharedFd, Socket},
-    UnsubmittedWrite,
+  buf::fixed::FixedBuf,
+  buf::{BoundedBuf, BoundedBufMut},
+  io::{SharedFd, Socket},
+  UnsubmittedWrite,
 };
 
 /// A TCP stream between a local and a remote socket.
@@ -93,7 +93,7 @@ impl TcpStream {
   /// current `tokio-uring` runtime.
   pub async fn read_fixed<T>(&self, buf: T) -> crate::BufResult<usize, T>
   where
-    T: BoundedBufMut<BufMut=FixedBuf>,
+    T: BoundedBufMut<BufMut = FixedBuf>,
   {
     self.inner.read_fixed(buf).await
   }
@@ -174,7 +174,7 @@ impl TcpStream {
   /// current `tokio-uring` runtime.
   pub async fn write_fixed<T>(&self, buf: T) -> crate::BufResult<usize, T>
   where
-    T: BoundedBuf<Buf=FixedBuf>,
+    T: BoundedBuf<Buf = FixedBuf>,
   {
     self.inner.write_fixed(buf).await
   }
@@ -194,7 +194,7 @@ impl TcpStream {
   /// [`write_fixed`]: Self::write_fixed
   pub async fn write_fixed_all<T>(&self, buf: T) -> crate::BufResult<(), T>
   where
-    T: BoundedBuf<Buf=FixedBuf>,
+    T: BoundedBuf<Buf = FixedBuf>,
   {
     self.inner.write_fixed_all(buf).await
   }

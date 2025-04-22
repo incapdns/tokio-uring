@@ -14,10 +14,9 @@ impl Op<Close> {
     use io_uring::{opcode, types};
 
     CONTEXT.with(|x| {
-      x.handle()
-        .submit_op(Close { fd }, |close| {
-          opcode::Close::new(types::Fd(close.fd)).build()
-        })
+      x.handle().submit_op(Close { fd }, |close| {
+        opcode::Close::new(types::Fd(close.fd)).build()
+      })
     })
   }
 }

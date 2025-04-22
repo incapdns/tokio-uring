@@ -26,18 +26,17 @@ impl Op<Open> {
       | (options.custom_flags & !libc::O_ACCMODE);
 
     CONTEXT.with(|x| {
-      x.handle()
-        .submit_op(Open { path, flags }, |open| {
-          // Get a reference to the memory. The string will be held by the
-          // operation state and will not be accessed again until the operation
-          // completes.
-          let p_ref = open.path.as_c_str().as_ptr();
+      x.handle().submit_op(Open { path, flags }, |open| {
+        // Get a reference to the memory. The string will be held by the
+        // operation state and will not be accessed again until the operation
+        // completes.
+        let p_ref = open.path.as_c_str().as_ptr();
 
-          opcode::OpenAt::new(types::Fd(libc::AT_FDCWD), p_ref)
-            .flags(flags)
-            .mode(options.mode)
-            .build()
-        })
+        opcode::OpenAt::new(types::Fd(libc::AT_FDCWD), p_ref)
+          .flags(flags)
+          .mode(options.mode)
+          .build()
+      })
     })
   }
 }

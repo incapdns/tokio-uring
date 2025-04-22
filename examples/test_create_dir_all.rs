@@ -70,7 +70,7 @@ fn tests() -> std::slice::Iter<'static, Expected<'static>> {
     Expected::Fail(Op::is_regfile("/tmp/test-good-file")),
     Expected::Fail(Op::is_dir("/tmp/test-good-file")),
   ]
-    .iter()
+  .iter()
 }
 
 type OpPath<'a> = &'a str;

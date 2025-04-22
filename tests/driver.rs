@@ -63,7 +63,7 @@ fn complete_ops_on_drop() {
         .0
         .unwrap();
     })
-      .await;
+    .await;
 
     file
   });
@@ -91,7 +91,7 @@ fn too_many_submissions() {
           .0
           .unwrap();
       })
-        .await;
+      .await;
     }
   });
 }
@@ -143,5 +143,5 @@ async fn poll_once(future: impl std::future::Future) {
     assert!(future.as_mut().poll(cx).is_pending());
     Poll::Ready(())
   })
-    .await;
+  .await;
 }

@@ -13,11 +13,11 @@ use super::FixedBuf;
 use crate::buf::IoBufMut;
 use crate::runtime::CONTEXT;
 
-use tokio::pin;
-use tokio::sync::Notify;
 use std::io;
 use std::rc::Rc;
 use std::sync::Arc;
+use tokio::pin;
+use tokio::sync::Notify;
 
 /// A dynamic collection of I/O buffers pre-registered with the kernel.
 ///
@@ -160,7 +160,7 @@ impl<T: IoBufMut> FixedBufPool<T> {
   /// })
   /// # }
   /// ```
-  pub fn new(bufs: impl IntoIterator<Item=T>) -> Self {
+  pub fn new(bufs: impl IntoIterator<Item = T>) -> Self {
     FixedBufPool {
       inner: Rc::new(plumbing::Pool::new(bufs.into_iter())),
     }
@@ -186,10 +186,7 @@ impl<T: IoBufMut> FixedBufPool<T> {
   /// of the `tokio-uring` runtime this call is made in, the function returns
   /// an error.
   pub fn register(&self) -> io::Result<()> {
-    CONTEXT.with(|x| {
-      x.handle()
-        .register_buffers(Rc::clone(&self.inner) as _)
-    })
+    CONTEXT.with(|x| x.handle().register_buffers(Rc::clone(&self.inner) as _))
   }
 
   /// Unregisters this collection of buffers.
@@ -208,10 +205,7 @@ impl<T: IoBufMut> FixedBufPool<T> {
   /// an error. Calling `unregister` when no `FixedBufPool` is currently
   /// registered on this runtime also returns an error.
   pub fn unregister(&self) -> io::Result<()> {
-    CONTEXT.with(|x| {
-      x.handle()
-        .unregister_buffers(Rc::clone(&self.inner) as _)
-    })
+    CONTEXT.with(|x| x.handle().unregister_buffers(Rc::clone(&self.inner) as _))
   }
 
   /// Returns a buffer of requested capacity from this pool
@@ -227,7 +221,7 @@ impl<T: IoBufMut> FixedBufPool<T> {
   /// in which available buffers are retrieved.
   pub fn try_next(&mut self, cap: usize) -> Option<FixedBuf> {
     let mut inner = Rc::get_mut(&mut self.inner);
-    
+
     inner.as_mut()?.try_next(cap).map(|data| {
       let pool = Rc::clone(&self.inner);
       // Safety: the validity of buffer data is ensured by

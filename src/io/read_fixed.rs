@@ -20,9 +20,13 @@ pub(crate) struct ReadFixed<T> {
 
 impl<T> Op<ReadFixed<T>>
 where
-  T: BoundedBufMut<BufMut=FixedBuf>,
+  T: BoundedBufMut<BufMut = FixedBuf>,
 {
-  pub(crate) fn read_fixed_at(fd: &SharedFd, buf: T, offset: u64) -> io::Result<Pin<Box<Op<ReadFixed<T>>>>> {
+  pub(crate) fn read_fixed_at(
+    fd: &SharedFd,
+    buf: T,
+    offset: u64,
+  ) -> io::Result<Pin<Box<Op<ReadFixed<T>>>>> {
     use io_uring::{opcode, types};
 
     CONTEXT.with(|x| {
@@ -47,7 +51,7 @@ where
 
 impl<T> Completable for ReadFixed<T>
 where
-  T: BoundedBufMut<BufMut=FixedBuf>,
+  T: BoundedBufMut<BufMut = FixedBuf>,
 {
   type Output = BufResult<usize, T>;
 

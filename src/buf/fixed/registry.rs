@@ -97,7 +97,7 @@ impl<T: IoBufMut> FixedBufRegistry<T> {
   /// })
   /// # }
   /// ```
-  pub fn new(bufs: impl IntoIterator<Item=T>) -> Self {
+  pub fn new(bufs: impl IntoIterator<Item = T>) -> Self {
     FixedBufRegistry {
       inner: Rc::new(plumbing::Registry::new(bufs.into_iter())),
     }
@@ -123,10 +123,7 @@ impl<T: IoBufMut> FixedBufRegistry<T> {
   /// of the `tokio-uring` runtime this call is made in, the function returns
   /// an error.
   pub fn register(&self) -> io::Result<()> {
-    CONTEXT.with(|x| {
-      x.handle()
-        .register_buffers(Rc::clone(&self.inner) as _)
-    })
+    CONTEXT.with(|x| x.handle().register_buffers(Rc::clone(&self.inner) as _))
   }
 
   /// Unregisters this collection of buffers.
@@ -145,10 +142,7 @@ impl<T: IoBufMut> FixedBufRegistry<T> {
   /// an error. Calling `unregister` when no `FixedBufRegistry` is currently
   /// registered on this runtime also returns an error.
   pub fn unregister(&self) -> io::Result<()> {
-    CONTEXT.with(|x| {
-      x.handle()
-        .unregister_buffers(Rc::clone(&self.inner) as _)
-    })
+    CONTEXT.with(|x| x.handle().unregister_buffers(Rc::clone(&self.inner) as _))
   }
 
   /// Returns a buffer identified by the specified index for use by the

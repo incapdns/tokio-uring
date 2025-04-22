@@ -30,7 +30,7 @@ impl Op<Connect> {
             connect.socket_addr.as_ptr(),
             connect.socket_addr.len(),
           )
-            .build()
+          .build()
         },
       )
     })

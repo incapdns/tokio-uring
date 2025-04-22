@@ -1,14 +1,17 @@
 use crate::buf::fixed::FixedBuffers;
-use crate::runtime::driver::op::{ArcMonitor, Completable, CqeResult, Lifecycle, Location, MultiCQE, Notifiable, OneshotCQE, Op, Updateable};
+use crate::runtime::driver::op::{
+  ArcMonitor, Completable, CqeResult, Lifecycle, Location, MultiCQE, Notifiable, OneshotCQE, Op,
+  Updateable,
+};
 pub(crate) use handle::*;
 use io_uring::{cqueue, opcode, squeue, CompletionQueue, IoUring, SubmissionQueue};
 use std::collections::LinkedList;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::{io, mem};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::task::{Context, Poll};
+use std::{io, mem};
 
 mod handle;
 pub(crate) mod op;
@@ -98,24 +101,36 @@ impl Driver {
   }
 
   #[inline(always)]
-  fn try_access_completion_shared(&self, callback: impl FnOnce(CompletionQueue)){
-    if self.accessing_completion_shared.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
+  fn try_access_completion_shared(&self, callback: impl FnOnce(CompletionQueue)) {
+    if self
+      .accessing_completion_shared
+      .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+      .is_ok()
+    {
       let cq = unsafe { self.uring.completion_shared() };
       callback(cq);
-      self.accessing_completion_shared.store(false, Ordering::Relaxed);
+      self
+        .accessing_completion_shared
+        .store(false, Ordering::Relaxed);
     }
   }
 
   #[inline(always)]
   fn access_submission_shared(&self, callback: impl FnOnce(SubmissionQueue)) {
-    while self.accessing_submission_shared.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_err() {}
+    while self
+      .accessing_submission_shared
+      .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+      .is_err()
+    {}
     let sq = unsafe { self.uring.submission_shared() };
     callback(sq);
-    self.accessing_submission_shared.store(false, Ordering::Relaxed);
+    self
+      .accessing_submission_shared
+      .store(false, Ordering::Relaxed);
   }
 
   pub(crate) fn dispatch_completions(&self) {
-    self.try_access_completion_shared(|mut cq|{
+    self.try_access_completion_shared(|mut cq| {
       cq.sync();
 
       for cqe in cq {
@@ -142,8 +157,8 @@ impl Driver {
 
         // Only notify if the result is not ECANCELED
         // and Op is not dropped.
-        if cqe.result() != -libc::ECANCELED
-        {                       // This will delay the drop of the Op until leave call
+        if cqe.result() != -libc::ECANCELED {
+          // This will delay the drop of the Op until leave call
           if let Some(_guard) = location.try_enter() {
             notifiable.notify(cqe);
           }
@@ -157,10 +172,7 @@ impl Driver {
     });
   }
 
-  pub(crate) fn register_buffers(
-    &mut self,
-    buffers: Rc<dyn FixedBuffers>,
-  ) -> io::Result<()> {
+  pub(crate) fn register_buffers(&mut self, buffers: Rc<dyn FixedBuffers>) -> io::Result<()> {
     unsafe {
       self
         .uring
@@ -172,10 +184,7 @@ impl Driver {
     Ok(())
   }
 
-  pub(crate) fn unregister_buffers(
-    &mut self,
-    buffers: Rc<dyn FixedBuffers>,
-  ) -> io::Result<()> {
+  pub(crate) fn unregister_buffers(&mut self, buffers: Rc<dyn FixedBuffers>) -> io::Result<()> {
     if let Some(currently_registered) = &self.fixed_buffers {
       if Rc::ptr_eq(&buffers, currently_registered) {
         self.uring.submitter().unregister_buffers()?;
@@ -454,22 +463,22 @@ mod test {
   #[macro_export]
   macro_rules! assert_at_least_elapsed {
     ($start:expr, $dur:expr) => {{
-        let elapsed = $start.elapsed();
-        // type ascription improves compiler error when wrong type is passed
-        let lower: std::time::Duration = $dur;
+      let elapsed = $start.elapsed();
+      // type ascription improves compiler error when wrong type is passed
+      let lower: std::time::Duration = $dur;
 
-        // Handles ms rounding
-        assert!(
-            elapsed >= lower && lower <= elapsed + std::time::Duration::from_millis(1),
-            "actual = {:?}, expected = {:?}",
-            elapsed,
-            lower
-        );
+      // Handles ms rounding
+      assert!(
+        elapsed >= lower && lower <= elapsed + std::time::Duration::from_millis(1),
+        "actual = {:?}, expected = {:?}",
+        elapsed,
+        lower
+      );
     }};
   }
 
-  use std::time::Duration;
   use crate::runtime::CONTEXT;
+  use std::time::Duration;
 
   fn num_operations() -> usize {
     CONTEXT.with(|cx| {

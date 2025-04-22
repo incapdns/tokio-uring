@@ -79,7 +79,7 @@ impl<T: BoundedBuf, U: BoundedBuf> Op<SendMsg<T, U>> {
             types::Fd(sendmsg._fd.raw_fd()),
             &*sendmsg.msghdr as *const _,
           )
-            .build()
+          .build()
         },
       )
     })

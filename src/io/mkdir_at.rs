@@ -22,14 +22,13 @@ impl Op<Mkdir> {
     let _path = cstr(path)?;
 
     CONTEXT.with(|x| {
-      x.handle()
-        .submit_op(Mkdir { _path }, |mkdir| {
-          let p_ref = mkdir._path.as_c_str().as_ptr();
+      x.handle().submit_op(Mkdir { _path }, |mkdir| {
+        let p_ref = mkdir._path.as_c_str().as_ptr();
 
-          opcode::MkDirAt::new(types::Fd(libc::AT_FDCWD), p_ref)
-            .mode(mode)
-            .build()
-        })
+        opcode::MkDirAt::new(types::Fd(libc::AT_FDCWD), p_ref)
+          .mode(mode)
+          .build()
+      })
     })
   }
 }

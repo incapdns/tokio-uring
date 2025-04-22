@@ -28,16 +28,15 @@ impl Op<Unlink> {
     let path = super::util::cstr(path)?;
 
     CONTEXT.with(|x| {
-      x.handle()
-        .submit_op(Unlink { path }, |unlink| {
-          // Get a reference to the memory. The string will be held by the
-          // operation state and will not be accessed again until the operation
-          // completes.
-          let p_ref = unlink.path.as_c_str().as_ptr();
-          opcode::UnlinkAt::new(types::Fd(libc::AT_FDCWD), p_ref)
-            .flags(flags)
-            .build()
-        })
+      x.handle().submit_op(Unlink { path }, |unlink| {
+        // Get a reference to the memory. The string will be held by the
+        // operation state and will not be accessed again until the operation
+        // completes.
+        let p_ref = unlink.path.as_c_str().as_ptr();
+        opcode::UnlinkAt::new(types::Fd(libc::AT_FDCWD), p_ref)
+          .flags(flags)
+          .build()
+      })
     })
   }
 }

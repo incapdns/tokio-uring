@@ -15,7 +15,7 @@
 use crate::buf::fixed::FixedBuffers;
 use crate::runtime::driver::op::{Completable, MultiCQE, OneshotCQE, Op, SingleCQE, Updateable};
 use crate::runtime::driver::Driver;
-use io_uring::{squeue};
+use io_uring::squeue;
 use std::io;
 use std::ops::Deref;
 use std::os::unix::io::{AsRawFd, RawFd};
@@ -58,24 +58,23 @@ impl Handle {
     inner.register_buffers(buffers)
   }
 
-  pub(crate) fn unregister_buffers(
-    &mut self,
-    buffers: Rc<dyn FixedBuffers>,
-  ) -> io::Result<()> {
+  pub(crate) fn unregister_buffers(&mut self, buffers: Rc<dyn FixedBuffers>) -> io::Result<()> {
     let inner = Rc::get_mut(&mut self.inner).unwrap();
     inner.unregister_buffers(buffers)
   }
 
-  pub(crate) fn remove_op<T, CqeType: Unpin>(
-    &self,
-    op: &mut Op<T, CqeType>,
-  ) where
+  pub(crate) fn remove_op<T, CqeType: Unpin>(&self, op: &mut Op<T, CqeType>)
+  where
     T: Unpin + 'static,
   {
     self.inner.as_ref().remove_op(op)
   }
 
-  pub(crate) fn submit_op_2<T, S>(&self, sqe: squeue::Entry, data: T) -> io::Result<Pin<Box<Op<T, S>>>>
+  pub(crate) fn submit_op_2<T, S>(
+    &self,
+    sqe: squeue::Entry,
+    data: T,
+  ) -> io::Result<Pin<Box<Op<T, S>>>>
   where
     T: Completable,
     T: Unpin,
@@ -152,7 +151,7 @@ impl From<Driver> for Handle {
 
 impl<T> From<T> for WeakHandle
 where
-  T: Deref<Target=Handle>,
+  T: Deref<Target = Handle>,
 {
   fn from(handle: T) -> Self {
     Self {

@@ -137,7 +137,7 @@ impl<T: IoBuf> BoundedBuf for T {
 ///
 /// This trait provides a generic way to use mutable buffers and `Slice` views
 /// into such buffers with `io-uring` operations.
-pub trait BoundedBufMut: BoundedBuf<Buf=Self::BufMut> {
+pub trait BoundedBufMut: BoundedBuf<Buf = Self::BufMut> {
   /// The type of the underlying buffer.
   type BufMut: IoBufMut;
 

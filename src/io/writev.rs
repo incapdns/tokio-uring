@@ -47,8 +47,8 @@ impl<T: BoundedBuf> Op<Writev<T>> {
             write.iovs.as_ptr(),
             write.iovs.len() as u32,
           )
-            .offset(offset as _)
-            .build()
+          .offset(offset as _)
+          .build()
         },
       )
     })

@@ -21,7 +21,11 @@ pub(crate) struct Readv<T> {
 }
 
 impl<T: BoundedBufMut> Op<Readv<T>> {
-  pub(crate) fn readv_at(fd: &SharedFd, mut bufs: Vec<T>, offset: u64) -> io::Result<Pin<Box<Op<Readv<T>>>>> {
+  pub(crate) fn readv_at(
+    fd: &SharedFd,
+    mut bufs: Vec<T>,
+    offset: u64,
+  ) -> io::Result<Pin<Box<Op<Readv<T>>>>> {
     use io_uring::{opcode, types};
 
     // Build `iovec` objects referring the provided `bufs` for `io_uring::opcode::Readv`.
@@ -47,8 +51,8 @@ impl<T: BoundedBufMut> Op<Readv<T>> {
             read.iovs.as_ptr(),
             read.iovs.len() as u32,
           )
-            .offset(offset as _)
-            .build()
+          .offset(offset as _)
+          .build()
         },
       )
     })

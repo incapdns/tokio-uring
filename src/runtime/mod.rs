@@ -5,14 +5,14 @@ use std::mem::{ManuallyDrop, MaybeUninit};
 use std::os::fd::AsRawFd;
 use std::sync::{Arc, RwLock};
 use tokio::io::unix::AsyncFd;
-use tokio::task::LocalSet;
 use tokio::sync::Notify;
+use tokio::task::LocalSet;
 
 mod context;
 pub(crate) mod driver;
 
-pub(crate) use context::RuntimeContext;
 use crate::runtime::driver::Handle;
+pub(crate) use context::RuntimeContext;
 
 type Context = Arc<RuntimeContext>;
 
@@ -69,15 +69,16 @@ pub struct Runtime {
 /// });
 /// ```
 pub fn spawn<F>(task: F) -> tokio::task::JoinHandle<F::Output>
-where F: Future + Send + 'static,
-      F::Output: Send + 'static
+where
+  F: Future + Send + 'static,
+  F::Output: Send + 'static,
 {
   tokio::spawn(task)
 }
 
 struct Item {
   _context: Arc<RuntimeContext>,
-  async_fd: AsyncFd<Handle>
+  async_fd: AsyncFd<Handle>,
 }
 
 unsafe impl Send for Item {}
@@ -89,7 +90,7 @@ impl Item {
 
     Item {
       _context: context,
-      async_fd: AsyncFd::new(handle).unwrap()
+      async_fd: AsyncFd::new(handle).unwrap(),
     }
   }
 }
@@ -112,9 +113,7 @@ impl Runtime {
       .on_thread_start(on_thread_start)
       .on_thread_park(|| {
         CONTEXT.with(|x| {
-          let _ = x
-            .handle()
-            .flush();
+          let _ = x.handle().flush();
         });
       })
       .enable_all()
@@ -138,16 +137,14 @@ impl Runtime {
     let is_unique = |item: &Arc<RuntimeContext>, list: LinkedList<Arc<RuntimeContext>>| {
       let item_fd = item.handle().as_raw_fd();
 
-      !list
-        .iter()
-        .any(|i| i.handle().as_raw_fd() == item_fd)
+      !list.iter().any(|i| i.handle().as_raw_fd() == item_fd)
     };
 
     let contexts = self.contexts.clone();
 
     let signal = self.signal.clone();
 
-    move ||{
+    move || {
       let mut lock = contexts.write().unwrap();
 
       CONTEXT.with(|cx| {
@@ -162,7 +159,7 @@ impl Runtime {
     }
   }
 
-  async fn wait_event(item: Arc<Item>){
+  async fn wait_event(item: Arc<Item>) {
     loop {
       let mut guard = item.async_fd.readable().await.unwrap();
       guard.get_inner().dispatch_completions();
@@ -170,34 +167,27 @@ impl Runtime {
     }
   }
 
-  async fn drive_uring_wakes(signal: Arc<Notify>, contexts: Arc<RwLock<LinkedList<Arc<RuntimeContext>>>>) {
+  async fn drive_uring_wakes(
+    signal: Arc<Notify>,
+    contexts: Arc<RwLock<LinkedList<Arc<RuntimeContext>>>>,
+  ) {
     let mut our_list: Vec<Arc<Item>> = Vec::with_capacity(255);
 
     loop {
       let vec = {
         let guard = contexts.read().unwrap();
-        guard
-          .iter()
-          .cloned()
-          .collect::<Vec<_>>()
+        guard.iter().cloned().collect::<Vec<_>>()
       };
 
       let vec_len = vec.len();
       let our_list_len = our_list.len();
 
       if our_list_len != vec_len {
-        vec
-          .iter()
-          .skip(our_list_len)
-          .for_each(|rc|{
-            our_list.push(Arc::new(Item::new((*rc).clone())));
-          });
+        vec.iter().skip(our_list_len).for_each(|rc| {
+          our_list.push(Arc::new(Item::new((*rc).clone())));
+        });
 
-        for item in
-          our_list
-            .iter()
-            .skip(our_list_len)
-        {
+        for item in our_list.iter().skip(our_list_len) {
           tokio::spawn(Runtime::wait_event(item.clone()));
         }
       }
@@ -244,9 +234,7 @@ impl Runtime {
           // assert!(drive.as_mut().poll(cx).is_pending());
           let result = future.as_mut().poll(cx);
           CONTEXT.with(|x| {
-            let _ = x
-              .handle()
-              .flush();
+            let _ = x.handle().flush();
           });
           result
         })))

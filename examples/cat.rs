@@ -1,7 +1,4 @@
-use std::{
-  io::Write,
-  io,
-};
+use std::{io, io::Write};
 
 use tokio_uring::fs::File;
 
@@ -10,7 +7,7 @@ fn main() {
     tokio_uring::spawn(async move {
       // Lock stdout
       let mut out = io::stdout();
-      
+
       let path = "/etc/hosts";
 
       // Open the file without blocking
@@ -37,6 +34,8 @@ fn main() {
 
       // Include a new line
       println!();
-    }).await.unwrap()
+    })
+    .await
+    .unwrap()
   });
 }

@@ -12,21 +12,19 @@ pub(crate) struct Fsync {
 impl Op<Fsync> {
   pub(crate) fn fsync(fd: &SharedFd) -> io::Result<Pin<Box<Op<Fsync>>>> {
     CONTEXT.with(|x| {
-      x.handle()
-        .submit_op(Fsync { fd: fd.clone() }, |fsync| {
-          opcode::Fsync::new(types::Fd(fsync.fd.raw_fd())).build()
-        })
+      x.handle().submit_op(Fsync { fd: fd.clone() }, |fsync| {
+        opcode::Fsync::new(types::Fd(fsync.fd.raw_fd())).build()
+      })
     })
   }
 
   pub(crate) fn datasync(fd: &SharedFd) -> io::Result<Pin<Box<Op<Fsync>>>> {
     CONTEXT.with(|x| {
-      x.handle()
-        .submit_op(Fsync { fd: fd.clone() }, |fsync| {
-          opcode::Fsync::new(types::Fd(fsync.fd.raw_fd()))
-            .flags(types::FsyncFlags::DATASYNC)
-            .build()
-        })
+      x.handle().submit_op(Fsync { fd: fd.clone() }, |fsync| {
+        opcode::Fsync::new(types::Fd(fsync.fd.raw_fd()))
+          .flags(types::FsyncFlags::DATASYNC)
+          .build()
+      })
     })
   }
 }

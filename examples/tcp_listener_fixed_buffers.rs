@@ -42,9 +42,9 @@ async fn accept_loop(listen_addr: SocketAddr) {
   registry.register().unwrap();
 
   //loop {
-    //let (stream, peer) = listener.accept().await.unwrap();
+  //let (stream, peer) = listener.accept().await.unwrap();
 
-    //tokio::spawn(echo_handler(stream, peer, registry.clone()));
+  //tokio::spawn(echo_handler(stream, peer, registry.clone()));
   //}
 }
 

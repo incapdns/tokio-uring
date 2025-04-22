@@ -39,7 +39,7 @@ impl Op<Statx> {
         // If there is no path, add appropriate bit to flags.
         flags |= libc::AT_EMPTY_PATH;
         CStr::from_bytes_with_nul(b"\0").unwrap().into() // TODO Is there a constant CString we
-        // could use here.
+                                                         // could use here.
       }
     };
     CONTEXT.with(|x| {
@@ -55,9 +55,9 @@ impl Op<Statx> {
             statx.path.as_ptr(),
             &mut *statx.statx as *mut libc::statx as *mut types::statx,
           )
-            .flags(flags)
-            .mask(mask)
-            .build()
+          .flags(flags)
+          .mask(mask)
+          .build()
         },
       )
     })

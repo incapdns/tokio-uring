@@ -145,7 +145,7 @@ macro_rules! test_slice {
 fn test_subslice_read_case<B, R>(slice: Slice<B>, expected: &[u8], range: R) -> B
 where
   B: tokio_uring::buf::IoBuf,
-  R: RangeBounds<usize> + SliceIndex<[u8], Output=[u8]> + Clone,
+  R: RangeBounds<usize> + SliceIndex<[u8], Output = [u8]> + Clone,
 {
   use std::ops::{Bound, Index};
 

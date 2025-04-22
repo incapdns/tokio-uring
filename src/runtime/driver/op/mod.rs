@@ -1,28 +1,28 @@
+use crate::runtime::driver::WeakHandle;
 use crate::runtime::{driver, CONTEXT};
+use atomic::Atomic;
 use atomic_wait::{wait, wake_all};
+use bytemuck::NoUninit;
 use io_uring::{cqueue, squeue};
+use std::cmp::PartialEq;
 use std::collections::LinkedList;
 use std::future::Future;
 use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
+use std::ptr::null;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::task::{Context, Poll, Waker};
 use std::{io, mem};
-use std::cmp::PartialEq;
-use std::ops::{Deref, DerefMut};
-use std::ptr::null;
-use atomic::Atomic;
-use bytemuck::NoUninit;
-use crate::runtime::driver::WeakHandle;
 
 /// An unsubmitted oneshot operation.
-pub struct UnsubmittedOneshot<D: 'static, T: OneshotOutputTransform<StoredData=D>> {
+pub struct UnsubmittedOneshot<D: 'static, T: OneshotOutputTransform<StoredData = D>> {
   stable_data: D,
   post_op: T,
   sqe: squeue::Entry,
 }
 
-impl<D, T: OneshotOutputTransform<StoredData=D>> UnsubmittedOneshot<D, T>
+impl<D, T: OneshotOutputTransform<StoredData = D>> UnsubmittedOneshot<D, T>
 where
   T::Output: Unpin + 'static,
   T: Unpin,
@@ -39,13 +39,15 @@ where
 
   /// Submit an operation to the driver for batched entry to the kernel.
   pub fn submit(self) -> Pin<Box<Op<InFlightOneshot<D, T>, OneshotCQE>>> {
-    let handle = CONTEXT
-      .with(|x| x.handle());
+    let handle = CONTEXT.with(|x| x.handle());
 
     self.submit_with_driver(&handle)
   }
 
-  fn submit_with_driver(self, driver: &driver::Handle) -> Pin<Box<Op<InFlightOneshot<D, T>, OneshotCQE>>> {
+  fn submit_with_driver(
+    self,
+    driver: &driver::Handle,
+  ) -> Pin<Box<Op<InFlightOneshot<D, T>, OneshotCQE>>> {
     let inner = InFlightOneshotInner {
       stable_data: self.stable_data,
       post_op: self.post_op,
@@ -58,11 +60,11 @@ where
 }
 
 /// An in-progress oneshot operation which can be polled for completion.
-pub struct InFlightOneshot<D: 'static, T: OneshotOutputTransform<StoredData=D>> {
+pub struct InFlightOneshot<D: 'static, T: OneshotOutputTransform<StoredData = D>> {
   inner: Option<InFlightOneshotInner<D, T>>,
 }
 
-struct InFlightOneshotInner<D, T: OneshotOutputTransform<StoredData=D>> {
+struct InFlightOneshotInner<D, T: OneshotOutputTransform<StoredData = D>> {
   stable_data: D,
   post_op: T,
 }
@@ -81,7 +83,7 @@ pub trait OneshotOutputTransform {
 enum ArcMonitorStatus {
   Live,
   InUse,
-  Dropped
+  Dropped,
 }
 
 unsafe impl NoUninit for ArcMonitorStatus {}
@@ -107,19 +109,17 @@ impl<T> ArcMonitor<T> {
   #[allow(dead_code)]
   #[inline(always)]
   fn new(data: T, total: u32) -> &'static mut ArcMonitor<T> {
-    Box::leak(
-      Box::new(ArcMonitor {
-        status: Atomic::new(ArcMonitorStatus::Live),
-        data,
-        total: AtomicU32::new(total),
-        uses: AtomicU32::new(0)
-      })
-    )
+    Box::leak(Box::new(ArcMonitor {
+      status: Atomic::new(ArcMonitorStatus::Live),
+      data,
+      total: AtomicU32::new(total),
+      uses: AtomicU32::new(0),
+    }))
   }
 
   #[allow(dead_code)]
   #[inline(always)]
-  fn release(&mut self){
+  fn release(&mut self) {
     //SAFETY: Was previously a leaked Box<T>
     let _ = unsafe { Box::from_raw(self) };
   }
@@ -131,9 +131,12 @@ impl<T> ArcMonitor<T> {
     wake_all(&self.uses);
 
     if old_uses == 1 {
-      let _ = self
-        .status
-        .compare_exchange(ArcMonitorStatus::InUse, ArcMonitorStatus::Live, Ordering::Release, Ordering::Relaxed);
+      let _ = self.status.compare_exchange(
+        ArcMonitorStatus::InUse,
+        ArcMonitorStatus::Live,
+        Ordering::Release,
+        Ordering::Relaxed,
+      );
     }
   }
 
@@ -161,23 +164,24 @@ impl<T> ArcMonitor<T> {
     let old_uses = self.uses.fetch_add(1, Ordering::Release);
 
     if old_uses > 0 {
-      return Some(ArcMonitorGuard {
-        arc_monitor: self,
-      });
+      return Some(ArcMonitorGuard { arc_monitor: self });
     }
 
-    if
-      self
-        .status
-        .compare_exchange(ArcMonitorStatus::Live, ArcMonitorStatus::InUse, Ordering::Relaxed, Ordering::Relaxed)
-        .is_err() {
+    if self
+      .status
+      .compare_exchange(
+        ArcMonitorStatus::Live,
+        ArcMonitorStatus::InUse,
+        Ordering::Relaxed,
+        Ordering::Relaxed,
+      )
+      .is_err()
+    {
       self.leave();
       return None;
     }
 
-    Some(ArcMonitorGuard {
-      arc_monitor: self,
-    })
+    Some(ArcMonitorGuard { arc_monitor: self })
   }
 
   #[allow(dead_code)]
@@ -203,10 +207,7 @@ impl<T> ArcMonitor<T> {
     let mut uses = self.uses.load(Ordering::Acquire);
 
     if wail_until_drop {
-      while
-        self.status.load(Ordering::Acquire) !=
-        ArcMonitorStatus::Dropped
-      {
+      while self.status.load(Ordering::Acquire) != ArcMonitorStatus::Dropped {
         while uses != 0 {
           wait(&self.uses, uses);
           uses = self.uses.load(Ordering::Acquire);
@@ -214,7 +215,12 @@ impl<T> ArcMonitor<T> {
 
         if self
           .status
-          .compare_exchange(ArcMonitorStatus::Live, ArcMonitorStatus::Dropped, Ordering::Release, Ordering::Relaxed)
+          .compare_exchange(
+            ArcMonitorStatus::Live,
+            ArcMonitorStatus::Dropped,
+            Ordering::Release,
+            Ordering::Relaxed,
+          )
           .is_ok()
         {
           return true;
@@ -224,7 +230,12 @@ impl<T> ArcMonitor<T> {
 
     self
       .status
-      .compare_exchange(ArcMonitorStatus::Live, ArcMonitorStatus::Dropped, Ordering::Release, Ordering::Relaxed)
+      .compare_exchange(
+        ArcMonitorStatus::Live,
+        ArcMonitorStatus::Dropped,
+        Ordering::Release,
+        Ordering::Relaxed,
+      )
       .is_ok()
   }
 }
@@ -272,8 +283,8 @@ where
 }
 
 /// Allow multi-thread for all operations
-unsafe impl <T: Unpin, CqeType: Unpin> Send for Op<T, CqeType> {}
-unsafe impl <T: Unpin, CqeType: Unpin> Sync for Op<T, CqeType> {}
+unsafe impl<T: Unpin, CqeType: Unpin> Send for Op<T, CqeType> {}
+unsafe impl<T: Unpin, CqeType: Unpin> Sync for Op<T, CqeType> {}
 
 /// A Marker for Ops which expect only a single completion event
 pub struct SingleCQE;
@@ -443,7 +454,7 @@ where
   }
 }
 
-impl<D: 'static, T: OneshotOutputTransform<StoredData=D>> Completable for InFlightOneshot<D, T> {
+impl<D: 'static, T: OneshotOutputTransform<StoredData = D>> Completable for InFlightOneshot<D, T> {
   type Output = T::Output;
 
   fn complete(mut self, cqe: CqeResult) -> Self::Output {
@@ -461,7 +472,8 @@ impl<D: 'static, T: OneshotOutputTransform<StoredData=D>> Completable for InFlig
 /// the Op has been dropped.
 impl<T: Unpin, CqeType: Unpin> Drop for Op<T, CqeType> {
   fn drop(&mut self) {
-    self.driver
+    self
+      .driver
       .upgrade()
       .expect("Not in runtime context")
       .remove_op(self);

@@ -31,8 +31,8 @@ impl Op<Accept> {
             &mut accept.socketaddr.0 as *mut _ as *mut _,
             &mut accept.socketaddr.1,
           )
-            .flags(libc::O_CLOEXEC)
-            .build()
+          .flags(libc::O_CLOEXEC)
+          .build()
         },
       )
     })

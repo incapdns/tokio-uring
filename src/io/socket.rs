@@ -83,7 +83,7 @@ impl Socket {
 
   pub(crate) async fn write_fixed<T>(&self, buf: T) -> crate::BufResult<usize, T>
   where
-    T: BoundedBuf<Buf=FixedBuf>,
+    T: BoundedBuf<Buf = FixedBuf>,
   {
     let op = Op::write_fixed_at(&self.fd, buf, 0).unwrap();
     op.await
@@ -91,7 +91,7 @@ impl Socket {
 
   pub(crate) async fn write_fixed_all<T>(&self, buf: T) -> crate::BufResult<(), T>
   where
-    T: BoundedBuf<Buf=FixedBuf>,
+    T: BoundedBuf<Buf = FixedBuf>,
   {
     let orig_bounds = buf.bounds();
     let (res, buf) = self.write_fixed_all_slice(buf.slice_full()).await;
@@ -175,7 +175,7 @@ impl Socket {
 
   pub(crate) async fn read_fixed<T>(&self, buf: T) -> crate::BufResult<usize, T>
   where
-    T: BoundedBufMut<BufMut=FixedBuf>,
+    T: BoundedBufMut<BufMut = FixedBuf>,
   {
     let op = Op::read_fixed_at(&self.fd, buf, 0).unwrap();
     op.await

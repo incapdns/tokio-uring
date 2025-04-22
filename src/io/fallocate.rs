@@ -22,15 +22,13 @@ impl Op<Fallocate> {
     flags: i32,
   ) -> io::Result<Pin<Box<Op<Fallocate>>>> {
     CONTEXT.with(|x| {
-      x.handle().submit_op(
-        Fallocate { fd: fd.clone() },
-        |fallocate| {
+      x.handle()
+        .submit_op(Fallocate { fd: fd.clone() }, |fallocate| {
           opcode::Fallocate::new(types::Fd(fallocate.fd.raw_fd()), len as _)
             .offset(offset as _)
             .mode(flags)
             .build()
-        },
-      )
+        })
     })
   }
 }

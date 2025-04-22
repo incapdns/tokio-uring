@@ -19,7 +19,7 @@ pub(crate) struct WriteFixed<T> {
 
 impl<T> Op<WriteFixed<T>>
 where
-  T: BoundedBuf<Buf=FixedBuf>,
+  T: BoundedBuf<Buf = FixedBuf>,
 {
   pub(crate) fn write_fixed_at(
     fd: &SharedFd,

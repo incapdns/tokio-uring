@@ -34,7 +34,7 @@ enum BufState {
 }
 
 impl<T: IoBufMut> Registry<T> {
-  pub(crate) fn new(bufs: impl Iterator<Item=T>) -> Self {
+  pub(crate) fn new(bufs: impl Iterator<Item = T>) -> Self {
     // Limit the number of buffers to the maximum allowable number.
     let bufs = bufs.take(cmp::min(UIO_MAXIOV as usize, u16::MAX as usize));
     // Collect into `buffers`, which holds the backing buffers for

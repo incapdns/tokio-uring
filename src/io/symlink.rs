@@ -14,20 +14,22 @@ pub(crate) struct Symlink {
 }
 
 impl Op<Symlink> {
-  pub(crate) fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> io::Result<Pin<Box<Op<Symlink>>>> {
+  pub(crate) fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(
+    from: P,
+    to: Q,
+  ) -> io::Result<Pin<Box<Op<Symlink>>>> {
     use io_uring::{opcode, types};
 
     let _from = cstr(from.as_ref())?;
     let _to = cstr(to.as_ref())?;
 
     CONTEXT.with(|x| {
-      x.handle()
-        .submit_op(Symlink { _from, _to }, |symlink| {
-          let from_ref = symlink._from.as_c_str().as_ptr();
-          let to_ref = symlink._to.as_c_str().as_ptr();
+      x.handle().submit_op(Symlink { _from, _to }, |symlink| {
+        let from_ref = symlink._from.as_c_str().as_ptr();
+        let to_ref = symlink._to.as_c_str().as_ptr();
 
-          opcode::SymlinkAt::new(types::Fd(libc::AT_FDCWD), from_ref, to_ref).build()
-        })
+        opcode::SymlinkAt::new(types::Fd(libc::AT_FDCWD), from_ref, to_ref).build()
+      })
     })
   }
 }

@@ -105,7 +105,7 @@ impl SharedFd {
         State::Closed => Poll::Ready(()),
       }
     })
-      .await;
+    .await;
   }
 }
 
