@@ -134,8 +134,7 @@ impl Driver {
       cq.sync();
 
       for cqe in cq {
-        if cqe.user_data() == u64::MAX ||
-           cqe.user_data() == 0 {
+        if cqe.user_data() == u64::MAX || cqe.user_data() == 0 {
           // Result of the cancellation action. There isn't anything we
           // need to do here. We must wait for the CQE for the operation
           // that was canceled.
@@ -425,10 +424,7 @@ impl Drop for Driver {
 
     unsafe {
       let cancel = opcode::AsyncCancel::new(u64::MAX);
-      let sqe = cancel
-        .build()
-        .user_data(0)
-        .flags(any_flags);
+      let sqe = cancel.build().user_data(0).flags(any_flags);
 
       while self.uring.submission().push(&sqe).is_err() {
         self

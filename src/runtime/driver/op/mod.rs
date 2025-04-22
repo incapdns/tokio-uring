@@ -440,9 +440,9 @@ where
       .upgrade()
       .expect("Not in runtime context")
       .poll_multishot_op(self.get_mut(), cx);
-    
+
     CONTEXT.with(|x| x.call_on_thread_park());
-    
+
     result
   }
 }

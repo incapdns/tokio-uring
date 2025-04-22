@@ -12,8 +12,8 @@ mod context;
 pub(crate) mod driver;
 
 use crate::runtime::driver::Handle;
+use crate::Builder;
 pub(crate) use context::RuntimeContext;
-use crate::{Builder};
 
 type Context = Arc<RuntimeContext>;
 
@@ -43,7 +43,7 @@ pub struct Runtime {
   signal: Arc<Notify>,
 
   /// Builder for runtime contexts
-  builder: Builder
+  builder: Builder,
 }
 
 /// Spawns a new asynchronous task, returning a [`JoinHandle`] for it.
@@ -109,7 +109,7 @@ impl Runtime {
       tokio_rt: MaybeUninit::zeroed(),
       contexts: Default::default(),
       builder: builder.clone(),
-      signal: Arc::new(Notify::new())
+      signal: Arc::new(Notify::new()),
     };
 
     let on_thread_start = runtime.create_on_thread_start_callback();
@@ -128,7 +128,7 @@ impl Runtime {
     runtime.start_uring_wakes_task();
 
     CONTEXT.with(|x| {
-      x.set_handle(Handle::new(&builder).expect("Internal error"));
+      x.set_handle(Handle::new(builder).expect("Internal error"));
       x.set_on_thread_park(Runtime::on_thread_park);
       let mut lock = runtime.contexts.lock().unwrap();
       lock.push_back(x.clone());
@@ -139,12 +139,12 @@ impl Runtime {
     Ok(runtime)
   }
 
-  fn on_thread_park(){
+  fn on_thread_park() {
     CONTEXT.with(|x| {
       let _ = x.handle().flush();
     });
   }
-  
+
   fn create_on_thread_start_callback(&self) -> impl Fn() + Sync + 'static {
     let is_unique = |item: &Context, list: &LinkedList<Context>| {
       let item_fd = item.handle().as_raw_fd();
@@ -182,19 +182,17 @@ impl Runtime {
     //SAFETY: It's always already initialized on Runtime::new method
     let tokio_rt = unsafe { self.tokio_rt.assume_init_ref() };
     let _guard = tokio_rt.enter();
-    self.local.spawn_local(
-      Runtime::drive_uring_wakes(
-        self.contexts.clone(),
-        self.signal.clone(),
-        self.builder.threads
-      )
-    );
+    self.local.spawn_local(Runtime::drive_uring_wakes(
+      self.contexts.clone(),
+      self.signal.clone(),
+      self.builder.threads,
+    ));
   }
 
   async fn drive_uring_wakes(
     contexts: Arc<Mutex<LinkedList<Context>>>,
     signal: Arc<Notify>,
-    threads: usize
+    threads: usize,
   ) {
     let mut total = 0;
 
@@ -202,7 +200,7 @@ impl Runtime {
       signal.notified().await;
 
       let mut guard = contexts.lock().unwrap();
-      
+
       for i in guard.iter() {
         tokio::spawn(Runtime::wait_event(Item::new(i.clone())));
         total += 1;
@@ -262,8 +260,8 @@ impl Drop for Runtime {
 
 #[cfg(test)]
 mod test {
-  use crate::builder;
   use super::*;
+  use crate::builder;
 
   #[test]
   fn block_on() {

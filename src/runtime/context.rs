@@ -4,10 +4,10 @@ use std::cell::{Cell, RefCell};
 /// Owns the driver and resides in thread-local storage.
 pub(crate) struct RuntimeContext {
   driver: RefCell<Option<Handle>>,
-  on_thread_park: Cell<fn()>
+  on_thread_park: Cell<fn()>,
 }
 
-fn noop(){}
+fn noop() {}
 
 impl RuntimeContext {
   /// Construct the context with an uninitialized driver.
@@ -51,7 +51,8 @@ impl RuntimeContext {
   /// Check if driver is initialized
   #[allow(dead_code)]
   pub(crate) fn is_set(&self) -> bool {
-    self.driver
+    self
+      .driver
       .try_borrow()
       .map(|b| b.is_some())
       .unwrap_or(false)
