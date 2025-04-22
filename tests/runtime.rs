@@ -25,9 +25,9 @@ fn spawn_a_task() {
 
   tokio_uring::start(async {
     let cell = Rc::new(RefCell::new(1));
-    let c = cell.clone();
+    //let c = cell.clone();
     let handle = tokio_uring::spawn(async move {
-      *c.borrow_mut() = 2;
+      //*c.borrow_mut() = 2;
     });
 
     handle.await.unwrap();

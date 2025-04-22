@@ -41,16 +41,17 @@ async fn accept_loop(listen_addr: SocketAddr) {
 
   registry.register().unwrap();
 
-  loop {
-    let (stream, peer) = listener.accept().await.unwrap();
+  //loop {
+    //let (stream, peer) = listener.accept().await.unwrap();
 
-    tokio::spawn(echo_handler(stream, peer, registry.clone()));
-  }
+    //tokio::spawn(echo_handler(stream, peer, registry.clone()));
+  //}
 }
 
 // A loop that echoes input to output. Use one fixed buffer for receiving and sending the response
 // back. Once the connection is closed, the function returns and the fixed buffer is dropped,
 // getting the fixed buffer index returned to the available pool kept by the registry.
+#[allow(dead_code)]
 async fn echo_handler<T: IoBufMut>(
   stream: TcpStream,
   peer: SocketAddr,

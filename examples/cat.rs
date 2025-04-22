@@ -1,6 +1,6 @@
 use std::{
   io::Write,
-  {env, io},
+  io,
 };
 
 use tokio_uring::fs::File;
