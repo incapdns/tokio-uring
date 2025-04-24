@@ -87,8 +87,8 @@ fn too_many_submissions() {
   let tempfile = tempfile();
 
   tokio_uring::start(async {
-    let file = File::create(tempfile.path()).await.unwrap();
     for _ in 0..600 {
+      let file = File::create(tempfile.path()).await.unwrap();
       poll_once(async {
         file
           .write_at(b"hello world".to_vec(), 0)
@@ -98,6 +98,7 @@ fn too_many_submissions() {
           .unwrap();
       })
       .await;
+      tokio_uring::fs::remove_file(tempfile.path()).await.expect("Internal Error");
     }
   });
 }
