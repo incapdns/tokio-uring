@@ -6,7 +6,6 @@ use socket2::SockAddr;
 use std::io;
 use std::io::IoSlice;
 use std::net::SocketAddr;
-use std::pin::Pin;
 
 pub(crate) struct SendMsgZc<T, U> {
   #[allow(dead_code)]
@@ -30,7 +29,7 @@ impl<T: BoundedBuf, U: BoundedBuf> Op<SendMsgZc<T, U>, MultiCQE> {
     io_bufs: Vec<T>,
     socket_addr: Option<SocketAddr>,
     msg_control: Option<U>,
-  ) -> io::Result<Pin<Box<Self>>> {
+  ) -> io::Result<Self> {
     use io_uring::{opcode, types};
 
     let mut msghdr: Box<libc::msghdr> = Box::new(unsafe { std::mem::zeroed() });

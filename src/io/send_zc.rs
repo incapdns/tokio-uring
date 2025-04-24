@@ -2,7 +2,6 @@ use crate::runtime::driver::op::{Completable, CqeResult, MultiCQE, Op, Updateabl
 use crate::runtime::CONTEXT;
 use crate::{buf::BoundedBuf, io::SharedFd, BufResult};
 use std::io;
-use std::pin::Pin;
 
 pub(crate) struct SendZc<T> {
   /// Holds a strong ref to the FD, preventing the file from being closed
@@ -17,7 +16,7 @@ pub(crate) struct SendZc<T> {
 }
 
 impl<T: BoundedBuf> Op<SendZc<T>, MultiCQE> {
-  pub(crate) fn send_zc(fd: &SharedFd, buf: T) -> io::Result<Pin<Box<Self>>> {
+  pub(crate) fn send_zc(fd: &SharedFd, buf: T) -> io::Result<Self> {
     use io_uring::{opcode, types};
 
     CONTEXT.with(|x| {

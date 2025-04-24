@@ -3,14 +3,13 @@ use crate::runtime::driver::op::{Completable, Op};
 use crate::runtime::CONTEXT;
 use std::io;
 use std::os::unix::io::RawFd;
-use std::pin::Pin;
 
 pub(crate) struct Close {
   fd: RawFd,
 }
 
 impl Op<Close> {
-  pub(crate) fn close(fd: RawFd) -> io::Result<Pin<Box<Op<Close>>>> {
+  pub(crate) fn close(fd: RawFd) -> io::Result<Op<Close>> {
     use io_uring::{opcode, types};
 
     CONTEXT.with(|x| {

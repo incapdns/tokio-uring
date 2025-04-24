@@ -20,7 +20,6 @@ use std::cell::RefCell;
 use std::io;
 use std::ops::Deref;
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::pin::Pin;
 use std::rc::{Rc, Weak};
 use std::task::{Context, Poll};
 
@@ -83,11 +82,7 @@ impl Handle {
     self.inner.as_ref().remove_op(op)
   }
 
-  pub(crate) fn submit_op_2<T, S>(
-    &self,
-    sqe: squeue::Entry,
-    data: T,
-  ) -> io::Result<Pin<Box<Op<T, S>>>>
+  pub(crate) fn submit_op_2<T, S>(&self, sqe: squeue::Entry, data: T) -> io::Result<Op<T, S>>
   where
     T: Completable,
     T: Unpin,
@@ -96,7 +91,7 @@ impl Handle {
     self.inner.as_ref().submit_op_2(sqe, data, self.into())
   }
 
-  pub(crate) fn submit_op<T, S, F>(&self, data: T, f: F) -> io::Result<Pin<Box<Op<T, S>>>>
+  pub(crate) fn submit_op<T, S, F>(&self, data: T, f: F) -> io::Result<Op<T, S>>
   where
     T: Completable,
     F: FnOnce(&mut T) -> squeue::Entry,

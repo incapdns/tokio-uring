@@ -37,14 +37,11 @@ where
   }
 
   /// Submit an operation to the driver for batched entry to the kernel.
-  pub fn submit(self) -> Pin<Box<Op<InFlightOneshot<D, T>, OneshotCQE>>> {
+  pub fn submit(self) -> Op<InFlightOneshot<D, T>, OneshotCQE> {
     CONTEXT.with(|x| self.submit_with_driver(&x.handle()))
   }
 
-  fn submit_with_driver(
-    self,
-    driver: &driver::Handle,
-  ) -> Pin<Box<Op<InFlightOneshot<D, T>, OneshotCQE>>> {
+  fn submit_with_driver(self, driver: &driver::Handle) -> Op<InFlightOneshot<D, T>, OneshotCQE> {
     let inner = InFlightOneshotInner {
       stable_data: self.stable_data,
       post_op: self.post_op,
@@ -364,14 +361,14 @@ impl From<cqueue::Entry> for CqeResult {
 
 impl<T: Unpin, CqeType: Unpin> Op<T, CqeType> {
   /// Create a new operation
-  pub(super) fn new(driver: WeakHandle, data: T) -> Pin<Box<Self>> {
-    Pin::new(Box::new(Op {
+  pub(super) fn new(driver: WeakHandle, data: T) -> Self {
+    Op {
       driver,
       lifecycle: ArcMonitor::<Lifecycle>::new(Lifecycle::Initial, 2),
       data: Some(data),
       mutex: spin::Mutex::new(()),
       _cqe_type: PhantomData,
-    }))
+    }
   }
 
   pub(super) fn location(&self) -> u64 {

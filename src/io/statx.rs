@@ -1,6 +1,5 @@
 use io_uring::{opcode, types};
 use std::ffi::CString;
-use std::pin::Pin;
 use std::{ffi::CStr, io};
 
 use crate::runtime::{
@@ -30,7 +29,7 @@ impl Op<Statx> {
     path: Option<CString>,
     flags: i32,
     mask: u32,
-  ) -> io::Result<Pin<Box<Op<Statx>>>> {
+  ) -> io::Result<Op<Statx>> {
     let raw = fd.as_ref().map_or(libc::AT_FDCWD, |fd| fd.raw_fd());
     let mut flags = flags;
     let path = match path {

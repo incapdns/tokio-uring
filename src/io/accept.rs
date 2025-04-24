@@ -3,7 +3,6 @@ use crate::runtime::driver::op;
 use crate::runtime::driver::op::{Completable, Op};
 use crate::runtime::CONTEXT;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::{boxed::Box, io};
 
 pub(crate) struct Accept {
@@ -12,7 +11,7 @@ pub(crate) struct Accept {
 }
 
 impl Op<Accept> {
-  pub(crate) fn accept(fd: &SharedFd) -> io::Result<Pin<Box<Op<Accept>>>> {
+  pub(crate) fn accept(fd: &SharedFd) -> io::Result<Op<Accept>> {
     use io_uring::{opcode, types};
 
     let socketaddr = Box::new((

@@ -6,7 +6,6 @@ use crate::BufResult;
 
 use crate::runtime::CONTEXT;
 use std::io;
-use std::pin::Pin;
 
 pub(crate) struct WriteFixed<T> {
   /// Holds a strong ref to the FD, preventing the file from being closed
@@ -25,7 +24,7 @@ where
     fd: &SharedFd,
     buf: T,
     offset: u64,
-  ) -> io::Result<Pin<Box<Op<WriteFixed<T>>>>> {
+  ) -> io::Result<Op<WriteFixed<T>>> {
     use io_uring::{opcode, types};
 
     CONTEXT.with(|x| {

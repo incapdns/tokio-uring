@@ -6,7 +6,6 @@ use super::util::cstr;
 use std::ffi::CString;
 use std::io;
 use std::path::Path;
-use std::pin::Pin;
 
 pub(crate) struct Symlink {
   pub(crate) _from: CString,
@@ -14,10 +13,7 @@ pub(crate) struct Symlink {
 }
 
 impl Op<Symlink> {
-  pub(crate) fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(
-    from: P,
-    to: Q,
-  ) -> io::Result<Pin<Box<Op<Symlink>>>> {
+  pub(crate) fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> io::Result<Op<Symlink>> {
     use io_uring::{opcode, types};
 
     let _from = cstr(from.as_ref())?;

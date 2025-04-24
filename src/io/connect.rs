@@ -3,7 +3,6 @@ use crate::runtime::driver::op::{Completable, CqeResult, Op};
 use crate::runtime::CONTEXT;
 use socket2::SockAddr;
 use std::io;
-use std::pin::Pin;
 
 /// Open a file
 pub(crate) struct Connect {
@@ -15,7 +14,7 @@ pub(crate) struct Connect {
 
 impl Op<Connect> {
   /// Submit a request to connect.
-  pub(crate) fn connect(fd: &SharedFd, socket_addr: SockAddr) -> io::Result<Pin<Box<Op<Connect>>>> {
+  pub(crate) fn connect(fd: &SharedFd, socket_addr: SockAddr) -> io::Result<Op<Connect>> {
     use io_uring::{opcode, types};
 
     CONTEXT.with(|x| {

@@ -5,7 +5,6 @@ use crate::BufResult;
 use crate::runtime::driver::op::{Completable, CqeResult, Op};
 use crate::runtime::CONTEXT;
 use std::io;
-use std::pin::Pin;
 
 pub(crate) struct Read<T> {
   /// Holds a strong ref to the FD, preventing the file from being closed
@@ -18,7 +17,7 @@ pub(crate) struct Read<T> {
 }
 
 impl<T: BoundedBufMut> Op<Read<T>> {
-  pub(crate) fn read_at(fd: &SharedFd, buf: T, offset: u64) -> io::Result<Pin<Box<Op<Read<T>>>>> {
+  pub(crate) fn read_at(fd: &SharedFd, buf: T, offset: u64) -> io::Result<Op<Read<T>>> {
     use io_uring::{opcode, types};
 
     CONTEXT.with(|x| {

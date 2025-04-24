@@ -6,7 +6,6 @@ use crate::BufResult;
 
 use crate::runtime::CONTEXT;
 use std::io;
-use std::pin::Pin;
 
 pub(crate) struct ReadFixed<T> {
   /// Holds a strong ref to the FD, preventing the file from being closed
@@ -22,11 +21,7 @@ impl<T> Op<ReadFixed<T>>
 where
   T: BoundedBufMut<BufMut = FixedBuf>,
 {
-  pub(crate) fn read_fixed_at(
-    fd: &SharedFd,
-    buf: T,
-    offset: u64,
-  ) -> io::Result<Pin<Box<Op<ReadFixed<T>>>>> {
+  pub(crate) fn read_fixed_at(fd: &SharedFd, buf: T, offset: u64) -> io::Result<Op<ReadFixed<T>>> {
     use io_uring::{opcode, types};
 
     CONTEXT.with(|x| {

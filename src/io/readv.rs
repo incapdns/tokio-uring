@@ -6,7 +6,6 @@ use crate::runtime::driver::op::{Completable, CqeResult, Op};
 use crate::runtime::CONTEXT;
 use libc::iovec;
 use std::io;
-use std::pin::Pin;
 
 pub(crate) struct Readv<T> {
   /// Holds a strong ref to the FD, preventing the file from being closed
@@ -21,11 +20,7 @@ pub(crate) struct Readv<T> {
 }
 
 impl<T: BoundedBufMut> Op<Readv<T>> {
-  pub(crate) fn readv_at(
-    fd: &SharedFd,
-    mut bufs: Vec<T>,
-    offset: u64,
-  ) -> io::Result<Pin<Box<Op<Readv<T>>>>> {
+  pub(crate) fn readv_at(fd: &SharedFd, mut bufs: Vec<T>, offset: u64) -> io::Result<Op<Readv<T>>> {
     use io_uring::{opcode, types};
 
     // Build `iovec` objects referring the provided `bufs` for `io_uring::opcode::Readv`.

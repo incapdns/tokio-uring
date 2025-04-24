@@ -3,7 +3,6 @@ use crate::runtime::CONTEXT;
 use crate::{buf::BoundedBuf, io::SharedFd, BufResult};
 use libc::iovec;
 use std::io;
-use std::pin::Pin;
 
 pub(crate) struct Writev<T> {
   /// Holds a strong ref to the FD, preventing the file from being closed
@@ -22,7 +21,7 @@ impl<T: BoundedBuf> Op<Writev<T>> {
     fd: &SharedFd,
     mut bufs: Vec<T>,
     offset: u64,
-  ) -> io::Result<Pin<Box<Op<Writev<T>>>>> {
+  ) -> io::Result<Op<Writev<T>>> {
     use io_uring::{opcode, types};
 
     // Build `iovec` objects referring the provided `bufs` for `io_uring::opcode::Readv`.

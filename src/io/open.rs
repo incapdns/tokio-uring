@@ -6,7 +6,6 @@ use crate::runtime::CONTEXT;
 use std::ffi::CString;
 use std::io;
 use std::path::Path;
-use std::pin::Pin;
 
 /// Open a file
 #[allow(dead_code)]
@@ -17,7 +16,7 @@ pub(crate) struct Open {
 
 impl Op<Open> {
   /// Submit a request to open a file.
-  pub(crate) fn open(path: &Path, options: &OpenOptions) -> io::Result<Pin<Box<Op<Open>>>> {
+  pub(crate) fn open(path: &Path, options: &OpenOptions) -> io::Result<Op<Open>> {
     use io_uring::{opcode, types};
     let path = super::util::cstr(path)?;
     let flags = libc::O_CLOEXEC

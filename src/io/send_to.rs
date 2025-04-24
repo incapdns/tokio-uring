@@ -5,7 +5,6 @@ use crate::runtime::CONTEXT;
 use crate::BufResult;
 use socket2::SockAddr;
 use std::io::IoSlice;
-use std::pin::Pin;
 use std::{boxed::Box, io, net::SocketAddr};
 
 pub(crate) struct SendTo<T> {
@@ -24,7 +23,7 @@ impl<T: BoundedBuf> Op<SendTo<T>> {
     fd: &SharedFd,
     buf: T,
     socket_addr: Option<SocketAddr>,
-  ) -> io::Result<Pin<Box<Op<SendTo<T>>>>> {
+  ) -> io::Result<Op<SendTo<T>>> {
     use io_uring::{opcode, types};
 
     let io_slices = vec![IoSlice::new(unsafe {

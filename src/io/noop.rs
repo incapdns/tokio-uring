@@ -1,7 +1,6 @@
 use crate::runtime::driver::op::{Completable, CqeResult, Op};
 use crate::runtime::CONTEXT;
 use std::io;
-use std::pin::Pin;
 
 /// No operation. Just posts a completion event, nothing else.
 ///
@@ -9,7 +8,7 @@ use std::pin::Pin;
 pub struct NoOp {}
 
 impl Op<NoOp> {
-  pub fn no_op() -> io::Result<Pin<Box<Op<NoOp>>>> {
+  pub fn no_op() -> io::Result<Op<NoOp>> {
     use io_uring::opcode;
 
     CONTEXT.with(|x| {

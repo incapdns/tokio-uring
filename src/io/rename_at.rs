@@ -3,7 +3,6 @@ use crate::runtime::CONTEXT;
 use std::ffi::CString;
 use std::io;
 use std::path::Path;
-use std::pin::Pin;
 
 /// Renames a file, moving it between directories if required.
 ///
@@ -17,11 +16,7 @@ pub(crate) struct RenameAt {
 impl Op<RenameAt> {
   /// Submit a request to rename a specified path to a new name with
   /// the provided flags.
-  pub(crate) fn rename_at(
-    from: &Path,
-    to: &Path,
-    flags: u32,
-  ) -> io::Result<Pin<Box<Op<RenameAt>>>> {
+  pub(crate) fn rename_at(from: &Path, to: &Path, flags: u32) -> io::Result<Op<RenameAt>> {
     use io_uring::{opcode, types};
 
     let from = super::util::cstr(from)?;

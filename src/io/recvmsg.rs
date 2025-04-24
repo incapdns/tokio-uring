@@ -2,7 +2,6 @@ use crate::runtime::driver::op::{Completable, CqeResult, Op};
 use crate::runtime::CONTEXT;
 use crate::{buf::BoundedBufMut, io::SharedFd, BufResult};
 use socket2::SockAddr;
-use std::pin::Pin;
 use std::{
   io::IoSliceMut,
   {boxed::Box, io, net::SocketAddr},
@@ -19,7 +18,7 @@ pub(crate) struct RecvMsg<T> {
 }
 
 impl<T: BoundedBufMut> Op<RecvMsg<T>> {
-  pub(crate) fn recvmsg(fd: &SharedFd, mut bufs: Vec<T>) -> io::Result<Pin<Box<Op<RecvMsg<T>>>>> {
+  pub(crate) fn recvmsg(fd: &SharedFd, mut bufs: Vec<T>) -> io::Result<Op<RecvMsg<T>>> {
     use io_uring::{opcode, types};
 
     let mut io_slices = Vec::with_capacity(bufs.len());

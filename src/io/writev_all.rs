@@ -3,7 +3,6 @@ use crate::runtime::CONTEXT;
 use crate::{buf::BoundedBuf, io::SharedFd};
 use libc::iovec;
 use std::io;
-use std::pin::Pin;
 
 // This provides a common write-all implementation for writev and is fairly efficient by allocating
 // the Vec<iovec> just once, and computing the individual iovec entries just once, at the cost of
@@ -126,7 +125,7 @@ impl<T: BoundedBuf> Op<WritevAll<T>> {
     iovs_ptr: *const iovec,
     iovs_len: u32,
     offset: u64,
-  ) -> io::Result<Pin<Box<Op<WritevAll<T>>>>> {
+  ) -> io::Result<Op<WritevAll<T>>> {
     use io_uring::{opcode, types};
 
     CONTEXT.with(|x| {

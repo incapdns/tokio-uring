@@ -7,7 +7,6 @@ use io_uring::{cqueue, opcode, squeue, CompletionQueue, IoUring, SubmissionQueue
 use std::cell::RefCell;
 use std::collections::LinkedList;
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::task::{Context, Poll};
@@ -232,7 +231,7 @@ impl Driver {
     mut sqe: squeue::Entry,
     data: T,
     handle: WeakHandle,
-  ) -> io::Result<Pin<Box<Op<T, S>>>> {
+  ) -> io::Result<Op<T, S>> {
     // Create the operation
     let op = Op::new(handle, data);
 
@@ -251,7 +250,7 @@ impl Driver {
     mut data: T,
     f: F,
     handle: WeakHandle,
-  ) -> io::Result<Pin<Box<Op<T, S>>>>
+  ) -> io::Result<Op<T, S>>
   where
     F: FnOnce(&mut T) -> squeue::Entry,
   {

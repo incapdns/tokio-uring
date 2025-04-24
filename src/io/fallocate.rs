@@ -1,6 +1,5 @@
 use io_uring::{opcode, types};
 use std::io;
-use std::pin::Pin;
 
 use crate::{
   io::SharedFd,
@@ -20,7 +19,7 @@ impl Op<Fallocate> {
     offset: u64,
     len: u64,
     flags: i32,
-  ) -> io::Result<Pin<Box<Op<Fallocate>>>> {
+  ) -> io::Result<Op<Fallocate>> {
     CONTEXT.with(|x| {
       x.handle()
         .submit_op(Fallocate { fd: fd.clone() }, |fallocate| {

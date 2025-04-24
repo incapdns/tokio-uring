@@ -6,7 +6,6 @@ use super::util::cstr;
 use std::ffi::CString;
 use std::io;
 use std::path::Path;
-use std::pin::Pin;
 
 /// Create a directory at path relative to the current working directory
 /// of the caller's process.
@@ -16,7 +15,7 @@ pub(crate) struct Mkdir {
 
 impl Op<Mkdir> {
   /// Submit a request to create a directory
-  pub(crate) fn make_dir(path: &Path, mode: u32) -> io::Result<Pin<Box<Op<Mkdir>>>> {
+  pub(crate) fn make_dir(path: &Path, mode: u32) -> io::Result<Op<Mkdir>> {
     use io_uring::{opcode, types};
 
     let _path = cstr(path)?;
