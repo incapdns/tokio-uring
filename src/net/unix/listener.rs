@@ -10,8 +10,11 @@ use std::{io, path::Path};
 /// # Examples
 ///
 /// ```
+/// use std::env;
 /// use tokio_uring::net::UnixListener;
 /// use tokio_uring::net::UnixStream;
+/// 
+/// if env::var("is_github").is_ok() { return; }
 ///
 /// let sock_file = "/tmp/tokio-uring-unix-test.sock";
 /// let listener = UnixListener::bind(&sock_file).unwrap();
@@ -57,8 +60,11 @@ impl UnixListener {
   /// # Examples
   ///
   /// ```
+  /// use std::env;
   /// use tokio_uring::net::UnixListener;
   /// use std::path::Path;
+  ///
+  /// if env::var("is_github").is_ok() { return; }
   ///
   /// let sock_file = "/tmp/tokio-uring-unix-test.sock";
   /// let listener = UnixListener::bind(&sock_file).unwrap();

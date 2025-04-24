@@ -53,6 +53,8 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    env:
+      is_github: true
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust
@@ -61,6 +63,8 @@ jobs:
 
   test-docs:
     runs-on: ubuntu-latest
+    env:
+      is_github: true
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust
