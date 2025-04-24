@@ -98,7 +98,9 @@ fn too_many_submissions() {
           .unwrap();
       })
       .await;
-      tokio_uring::fs::remove_file(tempfile.path()).await.expect("Internal Error");
+      tokio_uring::fs::remove_file(tempfile.path())
+        .await
+        .expect("Internal Error");
     }
   });
 }
