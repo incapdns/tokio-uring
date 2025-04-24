@@ -65,6 +65,12 @@ fn complete_ops_on_drop() {
     })
     .await;
 
+    // It's important, because the primary future will not release
+    // after the result of block_on, since shutdown does not guarantee
+    // the instant release of resources after the end of mt runtime
+    // to release resources due to multi thread environment
+    tokio_uring::no_op().await.expect("Not in runtime?");
+
     file
   });
 
