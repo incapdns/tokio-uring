@@ -60,6 +60,11 @@ impl RuntimeContext {
     roc.dispatch_completions()
   }
 
+  pub(crate) fn flush(&self) {
+    let roc = unsafe { &*self.driver.as_ptr() };
+    let _ = roc.flush();
+  }
+
   #[inline(always)]
   pub(crate) fn call_on_thread_park(&self) {
     self.on_thread_park.get()();

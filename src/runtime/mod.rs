@@ -146,7 +146,7 @@ impl Runtime {
 
   fn on_thread_park() {
     CONTEXT.with(|x| {
-      let _ = x.handle().flush();
+      x.flush();
     });
   }
 
