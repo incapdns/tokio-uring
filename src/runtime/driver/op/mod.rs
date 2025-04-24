@@ -456,7 +456,7 @@ where
       .driver
       .upgrade()
       .expect("Not in runtime context")
-      .poll_op_oneshot(self.get_mut(), cx);
+      .poll_oneshot_op(self.get_mut(), cx);
 
     CONTEXT.with(|x| x.call_on_thread_park());
 

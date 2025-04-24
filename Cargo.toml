@@ -18,6 +18,7 @@ keywords = ["async", "fs", "io-uring"]
 
 [dependencies]
 tokio = { version = "1.2", features = ["full"] }
+spin = "0.10.0"
 atomic-wait = "1.1.0"
 atomic = "0.6"
 libc = "0.2.80"

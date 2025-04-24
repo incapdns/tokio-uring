@@ -117,7 +117,7 @@ impl Handle {
     self.inner.as_ref().poll_op(op, cx)
   }
 
-  pub(crate) fn poll_op_oneshot<T>(
+  pub(crate) fn poll_oneshot_op<T>(
     &self,
     op: &mut Op<T, OneshotCQE>,
     cx: &mut Context<'_>,
