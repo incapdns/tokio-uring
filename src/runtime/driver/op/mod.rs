@@ -10,7 +10,6 @@ use std::future::Future;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
-use std::ptr::null;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::task::{Context, Poll, Waker};
 use std::{io, mem};
@@ -86,11 +85,27 @@ enum ArcMonitorStatus {
 
 unsafe impl NoUninit for ArcMonitorStatus {}
 
+//SAFETY: It will go out of scope
+// only after receive the last CQE and Op<T> drop
 pub struct ArcMonitor<T> {
   status: Atomic<ArcMonitorStatus>,
   total: AtomicU32,
   uses: AtomicU32,
   data: T,
+}
+
+impl<T> Deref for ArcMonitor<T> {
+  type Target = T;
+
+  fn deref(&self) -> &Self::Target {
+    &self.data
+  }
+}
+
+impl<T> DerefMut for ArcMonitor<T> {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.data
+  }
 }
 
 pub struct ArcMonitorGuard<'a, T> {
@@ -118,7 +133,8 @@ impl<T> ArcMonitor<T> {
   #[allow(dead_code)]
   #[inline(always)]
   fn release(&mut self) {
-    //SAFETY: Was previously a leaked Box<T>
+    //SAFETY: Was previously a leaked Box<T> and fn release()
+    // will be called only once
     let _ = unsafe { Box::from_raw(self) };
   }
 
@@ -158,11 +174,11 @@ impl<T> ArcMonitor<T> {
 
   #[allow(dead_code)]
   #[inline(always)]
-  pub fn try_enter(&self) -> Option<ArcMonitorGuard<T>> {
+  fn internal_enter(&self) -> bool {
     let old_uses = self.uses.fetch_add(1, Ordering::Release);
 
     if old_uses > 0 {
-      return Some(ArcMonitorGuard { arc_monitor: self });
+      return true;
     }
 
     if self
@@ -176,10 +192,29 @@ impl<T> ArcMonitor<T> {
       .is_err()
     {
       self.leave();
-      return None;
+      return false;
     }
 
-    Some(ArcMonitorGuard { arc_monitor: self })
+    true
+  }
+
+  #[allow(dead_code)]
+  #[inline(always)]
+  pub fn try_enter(&self) -> Option<ArcMonitorGuard<T>> {
+    if self.internal_enter() {
+      Some(ArcMonitorGuard { arc_monitor: self })
+    } else {
+      None
+    }
+  }
+
+  #[allow(dead_code)]
+  #[inline(always)]
+  pub fn try_execute(&mut self, callback: impl FnOnce(&mut T)) {
+    if self.internal_enter() {
+      callback(&mut self.data);
+      self.leave();
+    }
   }
 
   #[allow(dead_code)]
@@ -238,27 +273,6 @@ impl<T> ArcMonitor<T> {
   }
 }
 
-impl<T> Deref for ArcMonitor<T> {
-  type Target = T;
-
-  fn deref(&self) -> &Self::Target {
-    &self.data
-  }
-}
-
-impl<T> DerefMut for ArcMonitor<T> {
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    //SAFETY: ArcMonitor is a leaked Box<T>
-    unsafe { mem::transmute(&mut self.data) }
-  }
-}
-
-#[derive(Default)]
-pub(crate) struct Location {
-  pub(crate) address: usize,
-  pub(crate) vtable: usize,
-}
-
 /// In-flight operation
 pub struct Op<T: 'static, CqeType = SingleCQE>
 where
@@ -267,14 +281,14 @@ where
 {
   driver: WeakHandle,
 
-  // Self element address and vtable
-  location: *const ArcMonitor<Location>,
-
   // Per-operation data
   data: Option<T>,
 
   // Operation state
-  lifecycle: Lifecycle,
+  lifecycle: &'static mut ArcMonitor<Lifecycle>,
+
+  // Lock for remove_op case
+  mutex: spin::Mutex<()>,
 
   // CqeType marker
   _cqe_type: PhantomData<CqeType>,
@@ -304,18 +318,6 @@ pub(crate) trait Updateable: Completable {
   /// Update will be called for cqe's which have the `more` flag set.
   /// The Op should update any internal state as required.
   fn update(&mut self, cqe: CqeResult);
-}
-
-pub(crate) trait Notifiable {
-  /// Notify will be called to notify the Lifecycle that a CQE has arrived.
-  /// This will call complete on lifecycle
-  fn notify(&mut self, cqe: cqueue::Entry);
-}
-
-impl<T: Unpin, CqeType: Unpin> Notifiable for Op<T, CqeType> {
-  fn notify(&mut self, cqe: cqueue::Entry) {
-    self.lifecycle.complete(cqe);
-  }
 }
 
 #[allow(dead_code)]
@@ -363,39 +365,21 @@ impl From<cqueue::Entry> for CqeResult {
 impl<T: Unpin, CqeType: Unpin> Op<T, CqeType> {
   /// Create a new operation
   pub(super) fn new(driver: WeakHandle, data: T) -> Pin<Box<Self>> {
-    let pinned = Pin::new(Box::new(Op {
+    Pin::new(Box::new(Op {
       driver,
-      location: null(),
-      lifecycle: Lifecycle::Initial,
+      lifecycle: ArcMonitor::<Lifecycle>::new(Lifecycle::Initial, 2),
       data: Some(data),
+      mutex: spin::Mutex::new(()),
       _cqe_type: PhantomData,
-    }));
-
-    pinned.initialize()
-  }
-
-  fn initialize(mut self: Pin<Box<Self>>) -> Pin<Box<Self>> {
-    let location = ArcMonitor::<Location>::new(Default::default(), 2);
-
-    let this = &*self as *const Op<T, CqeType> as *mut Op<T, CqeType>;
-    let notifiable: *mut dyn Notifiable = this as *mut _;
-
-    //SAFETY: Converting current address and vtable to a tuple
-    let (address, vtable): (usize, usize) = unsafe { mem::transmute(notifiable) };
-    location.address = address;
-    location.vtable = vtable;
-
-    self.location = location.container_ptr();
-
-    self
+    }))
   }
 
   pub(super) fn location(&self) -> u64 {
-    self.location as u64
+    self.lifecycle.container_ptr() as u64
   }
 
   pub(super) fn get_lifecycle(&mut self) -> &mut Lifecycle {
-    &mut self.lifecycle
+    &mut self.lifecycle.data
   }
 
   pub(super) fn take_data(&mut self) -> Option<T> {
@@ -414,12 +398,23 @@ where
   type Output = T::Output;
 
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-    let result = self
+    let ptr: *mut Op<T, SingleCQE> = self.get_mut() as *mut _;
+    let guard_ref = unsafe { &*ptr };
+    let poll_ref = unsafe { &mut *ptr };
+
+    let guard = guard_ref.mutex.lock();
+
+    let result = poll_ref
       .driver
       .upgrade()
       .expect("Not in runtime context")
-      .poll_op(self.get_mut(), cx);
+      .poll_op(poll_ref, cx);
 
+    drop(guard);
+
+    /* It's needed because the default local async context
+     * don't call on_thread_park, the others worker threads work normal
+     */
     CONTEXT.with(|x| x.call_on_thread_park());
 
     result
@@ -433,11 +428,19 @@ where
   type Output = T::Output;
 
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-    let result = self
+    let ptr: *mut Op<T, MultiCQE> = self.get_mut() as *mut _;
+    let guard_ref = unsafe { &*ptr };
+    let poll_ref = unsafe { &mut *ptr };
+
+    let guard = guard_ref.mutex.lock();
+
+    let result = poll_ref
       .driver
       .upgrade()
       .expect("Not in runtime context")
-      .poll_multishot_op(self.get_mut(), cx);
+      .poll_multishot_op(poll_ref, cx);
+
+    drop(guard);
 
     CONTEXT.with(|x| x.call_on_thread_park());
 
@@ -452,11 +455,19 @@ where
   type Output = T::Output;
 
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-    let result = self
+    let ptr: *mut Op<T, OneshotCQE> = self.get_mut() as *mut _;
+    let guard_ref = unsafe { &*ptr };
+    let poll_ref = unsafe { &mut *ptr };
+
+    let guard = guard_ref.mutex.lock();
+
+    let result = poll_ref
       .driver
       .upgrade()
       .expect("Not in runtime context")
-      .poll_oneshot_op(self.get_mut(), cx);
+      .poll_oneshot_op(poll_ref, cx);
+
+    drop(guard);
 
     CONTEXT.with(|x| x.call_on_thread_park());
 
@@ -482,19 +493,22 @@ impl<D: 'static, T: OneshotOutputTransform<StoredData = D>> Completable for InFl
 /// the Op has been dropped.
 impl<T: Unpin, CqeType: Unpin> Drop for Op<T, CqeType> {
   fn drop(&mut self) {
+    let ptr = self as *mut _;
+    let _guard = self.mutex.lock();
+    let this = unsafe { &mut *ptr };
     self
       .driver
       .upgrade()
       .expect("Not in runtime context")
-      .remove_op(self);
+      .remove_op(this);
   }
 }
 
 impl Lifecycle {
   pub(crate) fn complete(&mut self, cqe: cqueue::Entry) {
-    use std::mem;
+    let current = mem::replace(self, Lifecycle::Submitted);
 
-    match mem::replace(self, Lifecycle::Submitted) {
+    match current {
       x @ Lifecycle::Initial | x @ Lifecycle::Submitted | x @ Lifecycle::Waiting(..) => {
         if cqueue::more(cqe.flags()) {
           let mut list = LinkedList::new();
@@ -528,4 +542,14 @@ impl Lifecycle {
       }
     }
   }
+}
+
+
+#[test]
+fn test_mutex(){
+  crate::start(async {
+    let nop = crate::no_op();
+    let no_op = nop.await;
+    assert_eq!(no_op.unwrap(), ());
+  });
 }

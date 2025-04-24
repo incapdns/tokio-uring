@@ -1,6 +1,6 @@
 use crate::buf::fixed::FixedBuffers;
 use crate::runtime::driver::op::{
-  ArcMonitor, Completable, CqeResult, Lifecycle, Location, MultiCQE, Notifiable, OneshotCQE, Op,
+  ArcMonitor, Completable, CqeResult, Lifecycle, MultiCQE, OneshotCQE, Op,
   Updateable,
 };
 pub(crate) use handle::*;
@@ -12,7 +12,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::task::{Context, Poll};
-use std::{io, mem};
+use std::{io, mem, ptr};
 
 mod handle;
 pub(crate) mod op;
@@ -144,9 +144,7 @@ impl Driver {
 
         // SAFETY: The user_data field of the CQE is a pointer to Location struct
         // which Future is pinned in memory.
-        let location: &mut ArcMonitor<Location> = unsafe { mem::transmute(cqe.user_data()) };
-        let notifiable: &mut dyn Notifiable =
-          unsafe { mem::transmute((location.address, location.vtable)) };
+        let arc_monitor: &mut ArcMonitor<Lifecycle> = unsafe { mem::transmute(cqe.user_data()) };
 
         let mut is_last = false;
 
@@ -159,14 +157,13 @@ impl Driver {
         // Only notify if the result is not ECANCELED
         // and Op is not dropped.
         if cqe.result() != -libc::ECANCELED {
-          // This will delay the drop of the Op until leave call
-          if let Some(_guard) = location.try_enter() {
-            notifiable.notify(cqe);
-          }
+          arc_monitor.try_execute(|lifecycle|{
+            lifecycle.complete(cqe);
+          });
         }
 
         if is_last {
-          location.quit();
+          arc_monitor.quit();
           self.pending_number.fetch_sub(1, Ordering::Release);
         }
       }
@@ -207,7 +204,9 @@ impl Driver {
     // Get the Op Lifecycle state from the driver
     let lifecycle = op.get_lifecycle();
 
-    match mem::replace(lifecycle, Lifecycle::Submitted) {
+    let current = mem::replace(lifecycle, Lifecycle::Submitted);
+
+    match current {
       Lifecycle::Submitted | Lifecycle::Waiting(_) => {
         Driver::set_ignored(op);
       }
@@ -224,7 +223,7 @@ impl Driver {
       _ => {}
     }
 
-    let location: &mut ArcMonitor<Location> = unsafe { mem::transmute(op.location()) };
+    let location: &mut ArcMonitor<Lifecycle> = unsafe { mem::transmute(op.location()) };
 
     location.try_recycle(true);
   }
@@ -273,7 +272,7 @@ impl Driver {
     Ok(op)
   }
 
-  pub(crate) fn poll_op_oneshot<T>(
+  pub(crate) fn poll_oneshot_op<T>(
     &self,
     op: &mut Op<T, OneshotCQE>,
     cx: &mut Context<'_>,
@@ -283,7 +282,9 @@ impl Driver {
   {
     let lifecycle = op.get_lifecycle();
 
-    match mem::replace(lifecycle, Lifecycle::Submitted) {
+    let current = mem::replace(lifecycle, Lifecycle::Submitted);
+
+    match current {
       Lifecycle::Initial | Lifecycle::Submitted => {
         *lifecycle = Lifecycle::Waiting(cx.waker().clone());
         Poll::Pending
@@ -310,7 +311,9 @@ impl Driver {
   {
     let lifecycle = op.get_lifecycle();
 
-    match mem::replace(lifecycle, Lifecycle::Submitted) {
+    let current = mem::replace(lifecycle, Lifecycle::Submitted);
+
+    match current {
       Lifecycle::Submitted | Lifecycle::Initial => {
         *lifecycle = Lifecycle::Waiting(cx.waker().clone());
         Poll::Pending
@@ -373,7 +376,9 @@ impl Driver {
   {
     let lifecycle = op.get_lifecycle();
 
-    match mem::replace(lifecycle, Lifecycle::Submitted) {
+    let current = mem::replace(lifecycle, Lifecycle::Submitted);
+
+    match current {
       Lifecycle::Initial | Lifecycle::Submitted => {
         *lifecycle = Lifecycle::Waiting(cx.waker().clone());
         Poll::Pending

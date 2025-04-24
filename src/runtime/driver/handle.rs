@@ -125,7 +125,7 @@ impl Handle {
   where
     T: Unpin + 'static + Completable,
   {
-    self.inner.as_ref().poll_op_oneshot(op, cx)
+    self.inner.as_ref().poll_oneshot_op(op, cx)
   }
 
   pub(crate) fn poll_multishot_op<T>(
