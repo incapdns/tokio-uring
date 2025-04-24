@@ -224,7 +224,7 @@ impl Driver {
 
     let location: &mut ArcMonitor<Lifecycle> = unsafe { mem::transmute(op.location()) };
 
-    location.try_recycle(true);
+    location.try_recycle(false);
   }
 
   pub(crate) fn submit_op_2<T: Unpin, S: Unpin>(
