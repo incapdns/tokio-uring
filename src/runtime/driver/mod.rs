@@ -1,7 +1,6 @@
 use crate::buf::fixed::FixedBuffers;
 use crate::runtime::driver::op::{
-  ArcMonitor, Completable, CqeResult, Lifecycle, MultiCQE, OneshotCQE, Op,
-  Updateable,
+  ArcMonitor, Completable, CqeResult, Lifecycle, MultiCQE, OneshotCQE, Op, Updateable,
 };
 pub(crate) use handle::*;
 use io_uring::{cqueue, opcode, squeue, CompletionQueue, IoUring, SubmissionQueue};
@@ -12,7 +11,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::task::{Context, Poll};
-use std::{io, mem, ptr};
+use std::{io, mem};
 
 mod handle;
 pub(crate) mod op;
@@ -157,7 +156,7 @@ impl Driver {
         // Only notify if the result is not ECANCELED
         // and Op is not dropped.
         if cqe.result() != -libc::ECANCELED {
-          arc_monitor.try_execute(|lifecycle|{
+          arc_monitor.try_execute(|lifecycle| {
             lifecycle.complete(cqe);
           });
         }

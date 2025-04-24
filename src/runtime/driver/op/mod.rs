@@ -544,9 +544,8 @@ impl Lifecycle {
   }
 }
 
-
 #[test]
-fn test_mutex(){
+fn test_mutex() {
   crate::start(async {
     let nop = crate::no_op();
     let no_op = nop.await;
