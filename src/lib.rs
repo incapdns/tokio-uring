@@ -164,7 +164,8 @@ pub fn uring_builder() -> io_uring::Builder {
 #[derive(Clone)]
 pub struct Builder {
   entries: u32,
-  threads: usize,
+  worker_threads: usize,
+  thread_stack_size: usize,
   urb: io_uring::Builder,
 }
 
@@ -177,7 +178,8 @@ pub struct Builder {
 pub fn builder() -> Builder {
   Builder {
     entries: 256,
-    threads: std::thread::available_parallelism().unwrap().get(),
+    worker_threads: std::thread::available_parallelism().unwrap().get(),
+    thread_stack_size: 20971520,
     urb: io_uring::IoUring::builder(),
   }
 }
@@ -205,7 +207,13 @@ impl Builder {
 
   /// Replaces the default number of worker threads
   pub fn worker_threads(&mut self, num: usize) -> &mut Self {
-    self.threads = num;
+    self.worker_threads = num;
+    self
+  }
+
+  /// Replaces the default number of worker threads stack size
+  pub fn thread_stack_size(&mut self, num: usize) -> &mut Self {
+    self.worker_threads = num;
     self
   }
 

@@ -120,7 +120,8 @@ impl Runtime {
     let on_thread_start = runtime.create_on_thread_start_callback();
 
     let rt = tokio::runtime::Builder::new_multi_thread()
-      .worker_threads(builder.threads)
+      .worker_threads(builder.worker_threads)
+      .thread_stack_size(builder.thread_stack_size)
       .on_thread_start(on_thread_start)
       .on_thread_park(Runtime::on_thread_park)
       .enable_all()
@@ -191,7 +192,7 @@ impl Runtime {
     self.local.spawn_local(Runtime::drive_uring_wakes(
       self.contexts.clone(),
       self.signal.clone(),
-      self.builder.threads,
+      self.builder.worker_threads,
     ));
   }
 
