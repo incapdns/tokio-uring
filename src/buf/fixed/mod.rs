@@ -27,4 +27,6 @@ pub mod pool;
 pub use pool::FixedBufPool;
 
 mod registry;
+mod shared;
+
 pub use registry::FixedBufRegistry;

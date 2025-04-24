@@ -1,8 +1,9 @@
-use super::plumbing;
 use super::FixedBuf;
+use super::plumbing;
+use std::cell::RefCell;
 
+use crate::buf::fixed::shared::{process, register, unregister};
 use crate::buf::IoBufMut;
-use crate::runtime::CONTEXT;
 use std::io;
 use std::rc::Rc;
 
@@ -30,7 +31,7 @@ use std::rc::Rc;
 /// [`Runtime`]: crate::Runtime
 #[derive(Clone)]
 pub struct FixedBufRegistry<T: IoBufMut> {
-  inner: Rc<plumbing::Registry<T>>,
+  inner: RefCell<Rc<RefCell<plumbing::Registry<T>>>>,
 }
 
 impl<T: IoBufMut> FixedBufRegistry<T> {
@@ -99,7 +100,9 @@ impl<T: IoBufMut> FixedBufRegistry<T> {
   /// ```
   pub fn new(bufs: impl IntoIterator<Item = T>) -> Self {
     FixedBufRegistry {
-      inner: Rc::new(plumbing::Registry::new(bufs.into_iter())),
+      inner: RefCell::new(Rc::new(RefCell::new(plumbing::Registry::new(
+        bufs.into_iter(),
+      )))),
     }
   }
 
@@ -123,7 +126,7 @@ impl<T: IoBufMut> FixedBufRegistry<T> {
   /// of the `tokio-uring` runtime this call is made in, the function returns
   /// an error.
   pub fn register(&self) -> io::Result<()> {
-    CONTEXT.with(|x| x.handle().register_buffers(Rc::clone(&self.inner) as _))
+    register(self.inner.borrow().clone())
   }
 
   /// Unregisters this collection of buffers.
@@ -142,7 +145,7 @@ impl<T: IoBufMut> FixedBufRegistry<T> {
   /// an error. Calling `unregister` when no `FixedBufRegistry` is currently
   /// registered on this runtime also returns an error.
   pub fn unregister(&self) -> io::Result<()> {
-    CONTEXT.with(|x| x.handle().unregister_buffers(Rc::clone(&self.inner) as _))
+    unregister()
   }
 
   /// Returns a buffer identified by the specified index for use by the
@@ -153,12 +156,12 @@ impl<T: IoBufMut> FixedBufRegistry<T> {
   /// using the buffer takes ownership of it and returns it once completed,
   /// preventing shared use of the buffer while the operation is in flight.
   pub fn check_out(&mut self, index: usize) -> Option<FixedBuf> {
-    let inner = Rc::get_mut(&mut self.inner).unwrap();
-    inner.check_out(index).map(|data| {
-      let registry = Rc::clone(&self.inner);
-      // Safety: the validity of buffer data is ensured by
-      // plumbing::Registry::check_out
-      unsafe { FixedBuf::new(registry, data) }
-    })
+    let cob = {
+      let inner = self.inner.borrow_mut();
+      let mut inner = inner.borrow_mut();
+      inner.check_out(index)
+    };
+    let current = self.inner.borrow().clone();
+    process(current, cob)
   }
 }

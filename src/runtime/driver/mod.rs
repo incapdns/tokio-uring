@@ -5,6 +5,7 @@ use crate::runtime::driver::op::{
 };
 pub(crate) use handle::*;
 use io_uring::{cqueue, opcode, squeue, CompletionQueue, IoUring, SubmissionQueue};
+use std::cell::RefCell;
 use std::collections::LinkedList;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::pin::Pin;
@@ -32,7 +33,7 @@ pub(crate) struct Driver {
   /// Reference to the currently registered buffers.
   /// Ensures that the buffers are not dropped until
   /// after the io-uring runtime has terminated.
-  fixed_buffers: Option<Rc<dyn FixedBuffers>>,
+  fixed_buffers: RefCell<Option<Rc<RefCell<dyn FixedBuffers>>>>,
 }
 
 impl Driver {
@@ -44,7 +45,7 @@ impl Driver {
       accessing_completion_shared: AtomicBool::new(false),
       accessing_submission_shared: AtomicBool::new(false),
       pending_number: AtomicUsize::new(0),
-      fixed_buffers: None,
+      fixed_buffers: RefCell::new(None),
     })
   }
 
@@ -172,25 +173,23 @@ impl Driver {
     });
   }
 
-  pub(crate) fn register_buffers(&mut self, buffers: Rc<dyn FixedBuffers>) -> io::Result<()> {
-    unsafe {
-      self
-        .uring
-        .submitter()
-        .register_buffers(buffers.as_ref().iovecs())
-    }?;
+  pub(crate) fn register_buffers(
+    &mut self,
+    buffers: Rc<RefCell<dyn FixedBuffers>>,
+  ) -> io::Result<()> {
+    let items = buffers.borrow();
 
-    self.fixed_buffers = Some(buffers);
+    unsafe { self.uring.submitter().register_buffers(items.iovecs()) }?;
+
+    self.fixed_buffers = RefCell::new(Some(buffers.clone()));
+
     Ok(())
   }
 
-  pub(crate) fn unregister_buffers(&mut self, buffers: Rc<dyn FixedBuffers>) -> io::Result<()> {
-    if let Some(currently_registered) = &self.fixed_buffers {
-      if Rc::ptr_eq(&buffers, currently_registered) {
-        self.uring.submitter().unregister_buffers()?;
-        self.fixed_buffers = None;
-        return Ok(());
-      }
+  pub(crate) fn unregister_buffers(&mut self) -> io::Result<()> {
+    if let Some(_) = &self.fixed_buffers.take() {
+      self.uring.submitter().unregister_buffers()?;
+      return Ok(());
     }
     Err(io::Error::new(
       io::ErrorKind::Other,

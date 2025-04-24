@@ -7,12 +7,14 @@
 //! by [`FixedBufPool`].
 //!
 //! [`FixedBufPool`]: self::FixedBufPool
-
 use super::plumbing;
 use super::FixedBuf;
 use crate::buf::IoBufMut;
-use crate::runtime::CONTEXT;
+use std::cell::RefCell;
 
+use crate::buf::fixed::handle::CheckedOutBuf;
+use crate::buf::fixed::plumbing::Pool;
+use crate::buf::fixed::shared::{process, register, unregister};
 use std::io;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -93,7 +95,7 @@ use tokio::sync::Notify;
 /// ```
 #[derive(Clone)]
 pub struct FixedBufPool<T: IoBufMut> {
-  inner: Rc<plumbing::Pool<T>>,
+  inner: RefCell<Rc<RefCell<plumbing::Pool<T>>>>,
 }
 
 impl<T: IoBufMut> FixedBufPool<T> {
@@ -162,7 +164,7 @@ impl<T: IoBufMut> FixedBufPool<T> {
   /// ```
   pub fn new(bufs: impl IntoIterator<Item = T>) -> Self {
     FixedBufPool {
-      inner: Rc::new(plumbing::Pool::new(bufs.into_iter())),
+      inner: RefCell::new(Rc::new(RefCell::new(Pool::new(bufs.into_iter())))),
     }
   }
 
@@ -186,7 +188,7 @@ impl<T: IoBufMut> FixedBufPool<T> {
   /// of the `tokio-uring` runtime this call is made in, the function returns
   /// an error.
   pub fn register(&self) -> io::Result<()> {
-    CONTEXT.with(|x| x.handle().register_buffers(Rc::clone(&self.inner) as _))
+    register(self.inner.borrow().clone())
   }
 
   /// Unregisters this collection of buffers.
@@ -204,8 +206,9 @@ impl<T: IoBufMut> FixedBufPool<T> {
   /// of the `tokio-uring` runtime this call is made in, the function returns
   /// an error. Calling `unregister` when no `FixedBufPool` is currently
   /// registered on this runtime also returns an error.
+  #[allow(private_interfaces)]
   pub fn unregister(&self) -> io::Result<()> {
-    CONTEXT.with(|x| x.handle().unregister_buffers(Rc::clone(&self.inner) as _))
+    unregister()
   }
 
   /// Returns a buffer of requested capacity from this pool
@@ -220,14 +223,13 @@ impl<T: IoBufMut> FixedBufPool<T> {
   /// An application should not rely on any particular order
   /// in which available buffers are retrieved.
   pub fn try_next(&mut self, cap: usize) -> Option<FixedBuf> {
-    let mut inner = Rc::get_mut(&mut self.inner);
-
-    inner.as_mut()?.try_next(cap).map(|data| {
-      let pool = Rc::clone(&self.inner);
-      // Safety: the validity of buffer data is ensured by
-      // plumbing::Pool::try_next
-      unsafe { FixedBuf::new(pool, data) }
-    })
+    let cob = {
+      let inner = self.inner.borrow_mut();
+      let mut inner = inner.borrow_mut();
+      inner.try_next(cap)
+    };
+    let current = self.inner.borrow().clone();
+    process(current, cob)
   }
 
   /// Resolves to a buffer of requested capacity
@@ -243,18 +245,23 @@ impl<T: IoBufMut> FixedBufPool<T> {
   pub async fn next(&mut self, cap: usize) -> FixedBuf {
     // Fast path: get the buffer if it's already available
     let notify = {
-      let inner = Rc::get_mut(&mut self.inner).unwrap();
+      let item = self.inner.borrow();
+      let mut inner = item.borrow_mut();
       if let Some(data) = inner.try_next(cap) {
-        // Safety: the validity of buffer data is ensured by
-        // plumbing::Pool::try_next
-        let buf = unsafe { FixedBuf::new(Rc::clone(&self.inner) as _, data) };
-        return buf;
+        let current = self.inner.borrow().clone();
+        return Self::get_fixed_buf(current, data);
       }
       inner.notify_on_next(cap)
     };
 
     // Poll for a buffer, engaging the `Notify` machinery.
     self.next_when_notified(cap, notify).await
+  }
+
+  fn get_fixed_buf(inner: Rc<RefCell<Pool<T>>>, data: CheckedOutBuf) -> FixedBuf {
+    // Safety: the validity of buffer data is ensured by
+    // plumbing::Pool::try_next
+    unsafe { FixedBuf::new(inner, data) }
   }
 
   #[cold]
@@ -266,11 +273,12 @@ impl<T: IoBufMut> FixedBufPool<T> {
       // between us calling `try_next` and here, so we can't miss a wakeup.
       notified.as_mut().await;
 
-      if let Some(data) = Rc::get_mut(&mut self.inner).unwrap().try_next(cap) {
-        // Safety: the validity of buffer data is ensured by
-        // plumbing::Pool::try_next
-        let buf = unsafe { FixedBuf::new(Rc::clone(&self.inner) as _, data) };
-        return buf;
+      let inner = self.inner.borrow_mut();
+      let mut inner = inner.borrow_mut();
+
+      if let Some(data) = inner.try_next(cap) {
+        let current = self.inner.borrow().clone();
+        return Self::get_fixed_buf(current, data);
       }
 
       // It's possible that the task did not get a buffer from `try_next`.

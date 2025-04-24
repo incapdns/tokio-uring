@@ -2,7 +2,7 @@ use std::collections::LinkedList;
 use std::future::Future;
 use std::io;
 use std::mem::{ManuallyDrop, MaybeUninit};
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsRawFd, RawFd};
 use std::sync::{Arc, Mutex};
 use tokio::io::unix::AsyncFd;
 use tokio::sync::Notify;
@@ -80,9 +80,15 @@ where
   tokio::spawn(task)
 }
 
+#[derive(Clone)]
 struct Item {
-  _context: Arc<RuntimeContext>,
-  async_fd: AsyncFd<Handle>,
+  context: Arc<RuntimeContext>,
+}
+
+impl AsRawFd for Item {
+  fn as_raw_fd(&self) -> RawFd {
+    self.context.driver_fd()
+  }
 }
 
 unsafe impl Send for Item {}
@@ -90,12 +96,11 @@ unsafe impl Sync for Item {}
 
 impl Item {
   fn new(context: Arc<RuntimeContext>) -> Item {
-    let handle = context.handle();
+    Item { context }
+  }
 
-    Item {
-      _context: context,
-      async_fd: AsyncFd::new(handle).unwrap(),
-    }
+  fn async_fd(&self) -> AsyncFd<Item> {
+    AsyncFd::new(self.clone()).unwrap()
   }
 }
 
@@ -147,9 +152,9 @@ impl Runtime {
 
   fn create_on_thread_start_callback(&self) -> impl Fn() + Sync + 'static {
     let is_unique = |item: &Context, list: &LinkedList<Context>| {
-      let item_fd = item.handle().as_raw_fd();
+      let item_fd = item.driver_fd();
 
-      !list.iter().any(|i| i.handle().as_raw_fd() == item_fd)
+      !list.iter().any(|i| i.driver_fd() == item_fd)
     };
 
     let contexts = self.contexts.clone();
@@ -171,9 +176,10 @@ impl Runtime {
   }
 
   async fn wait_event(item: Item) {
+    let async_fd = item.async_fd();
     loop {
-      let mut guard = item.async_fd.readable().await.unwrap();
-      guard.get_inner().dispatch_completions();
+      let mut guard = async_fd.readable().await.unwrap();
+      guard.get_inner().context.dispatch_completions();
       guard.clear_ready();
     }
   }
@@ -238,8 +244,7 @@ impl Runtime {
         .assume_init_read()
         .block_on(self.local.run_until(std::future::poll_fn(|cx| {
           // assert!(drive.as_mut().poll(cx).is_pending());
-          let result = future.as_mut().poll(cx);
-          result
+          future.as_mut().poll(cx)
         })))
     };
 

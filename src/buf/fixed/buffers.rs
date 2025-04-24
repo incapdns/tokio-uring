@@ -1,7 +1,8 @@
 use libc::iovec;
+use std::any::Any;
 
 // Abstracts management of fixed buffers in a buffer registry.
-pub(crate) trait FixedBuffers {
+pub(crate) trait FixedBuffers: Any {
   // Provides access to the raw buffers as a slice of iovec.
   fn iovecs(&self) -> &[iovec];
 

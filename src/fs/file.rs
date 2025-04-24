@@ -465,7 +465,7 @@ impl File {
   /// use std::iter;
   ///
   /// tokio_uring::start(async {
-  ///     let registry = FixedBufRegistry::new(iter::repeat(vec![0; 10]).take(10));
+  ///     let mut registry = FixedBufRegistry::new(iter::repeat(vec![0; 10]).take(10));
   ///     registry.register()?;
   ///
   ///     let f = File::open("foo.txt").await?;
@@ -656,7 +656,7 @@ impl File {
   /// use tokio_uring::buf::BoundedBuf;
   ///
   /// tokio_uring::start(async {
-  ///     let registry = FixedBufRegistry::new([b"some bytes".to_vec()]);
+  ///     let mut registry = FixedBufRegistry::new([b"some bytes".to_vec()]);
   ///     registry.register()?;
   ///
   ///     let file = File::create("foo.txt").await?;

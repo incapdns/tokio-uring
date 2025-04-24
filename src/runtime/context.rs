@@ -1,25 +1,63 @@
 use crate::runtime::driver::{Handle, WeakHandle};
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell, RefMut};
+use std::ops::{Deref, DerefMut};
+use std::os::fd::{AsRawFd, RawFd};
+
+fn noop() {}
+
+pub(crate) struct RefOnceCell<T> {
+  cell: OnceCell<T>,
+}
+
+impl<T> Default for RefOnceCell<T> {
+  fn default() -> Self {
+    Self {
+      cell: OnceCell::new(),
+    }
+  }
+}
+
+impl<T> Deref for RefOnceCell<T> {
+  type Target = T;
+
+  fn deref(&self) -> &Self::Target {
+    self.cell.get().unwrap()
+  }
+}
+
+impl<T> DerefMut for RefOnceCell<T> {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    self.cell.get_mut().unwrap()
+  }
+}
 
 /// Owns the driver and resides in thread-local storage.
 pub(crate) struct RuntimeContext {
-  driver: RefCell<Option<Handle>>,
+  driver: RefCell<RefOnceCell<Handle>>,
   on_thread_park: Cell<fn()>,
 }
-
-fn noop() {}
 
 impl RuntimeContext {
   /// Construct the context with an uninitialized driver.
   pub(crate) fn new() -> RuntimeContext {
     RuntimeContext {
-      driver: RefCell::new(None),
+      driver: RefCell::new(Default::default()),
       on_thread_park: Cell::new(noop),
     }
   }
 
-  pub(crate) fn handle(&self) -> Handle {
-    self.driver.borrow().clone().unwrap()
+  pub(crate) fn handle(&self) -> RefMut<'_, RefOnceCell<Handle>> {
+    self.driver.borrow_mut()
+  }
+
+  pub(crate) fn driver_fd(&self) -> RawFd {
+    let roc = unsafe { &*self.driver.as_ptr() };
+    roc.as_raw_fd()
+  }
+
+  pub(crate) fn dispatch_completions(&self) {
+    let roc = unsafe { &*self.driver.as_ptr() };
+    roc.dispatch_completions()
   }
 
   #[inline(always)]
@@ -33,19 +71,15 @@ impl RuntimeContext {
 
   /// Initialize the driver.
   pub(crate) fn set_handle(&self, handle: Handle) {
-    let mut guard = self.driver.borrow_mut();
+    let guard = self.driver.borrow_mut();
 
-    assert!(guard.is_none(), "Attempted to initialize the driver twice");
-
-    *guard = Some(handle);
+    let _ = guard.cell.set(handle);
   }
 
   pub(crate) fn unset_driver(&self) {
     let mut guard = self.driver.borrow_mut();
 
-    assert!(guard.is_some(), "Attempted to clear nonexistent driver");
-
-    *guard = None;
+    guard.cell.take();
   }
 
   /// Check if driver is initialized
@@ -54,13 +88,13 @@ impl RuntimeContext {
     self
       .driver
       .try_borrow()
-      .map(|b| b.is_some())
+      .map(|b| b.cell.get().is_some())
       .unwrap_or(false)
   }
 
   #[allow(dead_code)]
   pub(crate) fn weak(&self) -> Option<WeakHandle> {
-    self.driver.borrow().as_ref().map(Into::into)
+    self.driver.borrow().cell.get().map(Into::into)
   }
 }
 

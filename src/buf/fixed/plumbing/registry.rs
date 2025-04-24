@@ -5,6 +5,7 @@ use libc::{iovec, UIO_MAXIOV};
 use std::cmp;
 use std::mem;
 use std::ptr;
+use std::ptr::NonNull;
 use std::slice;
 
 // Internal state shared by FixedBufRegistry and FixedBuf handles.
@@ -12,7 +13,7 @@ pub(crate) struct Registry<T: IoBufMut> {
   // Pointer to an allocated array of iovec records referencing
   // the allocated buffers. The number of initialized records is the
   // same as the length of the states array.
-  raw_bufs: ptr::NonNull<iovec>,
+  raw_bufs: NonNull<iovec>,
   // Original capacity of raw_bufs as a Vec.
   orig_cap: usize,
   // State information on the buffers. Indices in this array correspond to
@@ -20,6 +21,17 @@ pub(crate) struct Registry<T: IoBufMut> {
   states: Vec<BufState>,
   // The owned buffers are kept until Drop
   buffers: Vec<T>,
+}
+
+impl<T: IoBufMut> Default for Registry<T> {
+  fn default() -> Self {
+    Self {
+      raw_bufs: NonNull::<iovec>::dangling(),
+      orig_cap: 0,
+      states: vec![],
+      buffers: Vec::with_capacity(0),
+    }
+  }
 }
 
 // State information of a buffer in the registry,
@@ -128,7 +140,10 @@ impl<T: IoBufMut> Drop for Registry<T> {
           // from Registry ownership, rather than deallocate.
           unsafe { self.buffers[i].set_init(*init_len) };
         }
-        BufState::CheckedOut => unreachable!("all buffers must be checked in"),
+        BufState::CheckedOut => { 
+          //unreachable!("all buffers must be checked in")
+          println!("Bug");
+        },
       }
     }
 

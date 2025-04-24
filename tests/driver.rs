@@ -102,7 +102,7 @@ fn completion_overflow() {
   use std::{thread, time};
   use tokio::task::JoinSet;
 
-  let spawn_cnt = 50;
+  let spawn_cnt = 2000;
   let squeue_entries = 2;
   let cqueue_entries = 2 * squeue_entries;
 

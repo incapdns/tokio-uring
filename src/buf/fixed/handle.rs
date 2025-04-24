@@ -1,5 +1,7 @@
 use super::FixedBuffers;
 use crate::buf::{IoBuf, IoBufMut};
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
 
 use libc::iovec;
 use std::fmt::{self, Debug};
@@ -30,19 +32,17 @@ pub(crate) struct CheckedOutBuf {
 /// [`FixedBufPool`]:     super::FixedBufPool
 ///
 pub struct FixedBuf {
-  registry: Rc<dyn FixedBuffers>,
+  registry: Rc<RefCell<dyn FixedBuffers>>,
   buf: CheckedOutBuf,
 }
 
 impl Drop for FixedBuf {
   fn drop(&mut self) {
-    let registry = Rc::get_mut(&mut self.registry);
+    let borrow_mut = self.registry.borrow_mut();
 
-    if registry.is_none() {
-      return;
-    }
+    let mut item = borrow_mut.as_ref().borrow_mut();
 
-    let registry = registry.unwrap();
+    let registry = item.borrow_mut();
     // Safety: the length of the initialized data in the buffer has been
     // maintained accordingly to the safety contracts on
     // Self::new and IoBufMut.
@@ -57,7 +57,7 @@ impl FixedBuf {
   // - the array will not be deallocated until the buffer is checked in;
   // - the data in the array must be initialized up to the number of bytes
   //   given in init_len.
-  pub(super) unsafe fn new(registry: Rc<dyn FixedBuffers>, buf: CheckedOutBuf) -> Self {
+  pub(super) unsafe fn new(registry: Rc<RefCell<dyn FixedBuffers>>, buf: CheckedOutBuf) -> Self {
     FixedBuf { registry, buf }
   }
 
