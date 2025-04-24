@@ -140,10 +140,10 @@ impl<T: IoBufMut> Drop for Registry<T> {
           // from Registry ownership, rather than deallocate.
           unsafe { self.buffers[i].set_init(*init_len) };
         }
-        BufState::CheckedOut => { 
+        BufState::CheckedOut => {
           //unreachable!("all buffers must be checked in")
           println!("Bug");
-        },
+        }
       }
     }
 

@@ -1,5 +1,5 @@
-use super::FixedBuf;
 use super::plumbing;
+use super::FixedBuf;
 use std::cell::RefCell;
 
 use crate::buf::fixed::shared::{process, register, unregister};

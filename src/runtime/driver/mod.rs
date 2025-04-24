@@ -187,7 +187,7 @@ impl Driver {
   }
 
   pub(crate) fn unregister_buffers(&mut self) -> io::Result<()> {
-    if let Some(_) = &self.fixed_buffers.take() {
+    if self.fixed_buffers.take().is_some() {
       self.uring.submitter().unregister_buffers()?;
       return Ok(());
     }

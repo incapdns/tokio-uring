@@ -39,7 +39,7 @@ where
 
   /// Submit an operation to the driver for batched entry to the kernel.
   pub fn submit(self) -> Pin<Box<Op<InFlightOneshot<D, T>, OneshotCQE>>> {
-    CONTEXT.with(|x| self.submit_with_driver(&**x.handle()))
+    CONTEXT.with(|x| self.submit_with_driver(&x.handle()))
   }
 
   fn submit_with_driver(
