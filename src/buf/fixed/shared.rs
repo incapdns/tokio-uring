@@ -3,10 +3,10 @@ use crate::buf::fixed::{FixedBuf, FixedBuffers};
 use crate::runtime::CONTEXT;
 use std::cell::RefCell;
 use std::io;
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub(crate) fn process(
-  this: Rc<RefCell<dyn FixedBuffers>>,
+  this: Arc<RefCell<dyn FixedBuffers>>,
   cob: Option<CheckedOutBuf>,
 ) -> Option<FixedBuf> {
   cob.map(|data| {
@@ -16,7 +16,7 @@ pub(crate) fn process(
   })
 }
 
-pub(crate) fn register(this: Rc<RefCell<dyn FixedBuffers>>) -> io::Result<()> {
+pub(crate) fn register(this: Arc<RefCell<dyn FixedBuffers>>) -> io::Result<()> {
   CONTEXT.with(|x| x.handle().register_buffers(this))
 }
 

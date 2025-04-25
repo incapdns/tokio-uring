@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use crate::buf::fixed::shared::{process, register, unregister};
 use crate::buf::IoBufMut;
 use std::io;
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// An indexed collection of I/O buffers pre-registered with the kernel.
 ///
@@ -31,7 +31,7 @@ use std::rc::Rc;
 /// [`Runtime`]: crate::Runtime
 #[derive(Clone)]
 pub struct FixedBufRegistry<T: IoBufMut> {
-  inner: RefCell<Rc<RefCell<plumbing::Registry<T>>>>,
+  inner: RefCell<Arc<RefCell<plumbing::Registry<T>>>>,
 }
 
 impl<T: IoBufMut> FixedBufRegistry<T> {
@@ -100,7 +100,7 @@ impl<T: IoBufMut> FixedBufRegistry<T> {
   /// ```
   pub fn new(bufs: impl IntoIterator<Item = T>) -> Self {
     FixedBufRegistry {
-      inner: RefCell::new(Rc::new(RefCell::new(plumbing::Registry::new(
+      inner: RefCell::new(Arc::new(RefCell::new(plumbing::Registry::new(
         bufs.into_iter(),
       )))),
     }

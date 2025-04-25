@@ -1,14 +1,13 @@
 use std::future::poll_fn;
 
+use crate::runtime::driver::op::Op;
+use std::sync::Arc;
 use std::{
   cell::RefCell,
   io,
   os::unix::io::{FromRawFd, RawFd},
-  rc::Rc,
   task::Waker,
 };
-
-use crate::runtime::driver::op::Op;
 
 // Tracks in-flight operations on a file descriptor. Ensures all in-flight
 // operations complete before submitting the close.
@@ -20,7 +19,7 @@ use crate::runtime::driver::op::Op;
 // Only the first close call returns the true result of closing the file descriptor.
 #[derive(Clone)]
 pub(crate) struct SharedFd {
-  inner: Rc<Inner>,
+  inner: Arc<Inner>,
 }
 
 unsafe impl Send for SharedFd {}
@@ -49,7 +48,7 @@ enum State {
 impl SharedFd {
   pub(crate) fn new(fd: RawFd) -> SharedFd {
     SharedFd {
-      inner: Rc::new(Inner {
+      inner: Arc::new(Inner {
         fd,
         state: RefCell::new(State::Init),
       }),
@@ -69,7 +68,7 @@ impl SharedFd {
     loop {
       // Get a mutable reference to Inner, indicating there are no
       // in-flight operations on the FD.
-      if let Some(inner) = Rc::get_mut(&mut self.inner) {
+      if let Some(inner) = Arc::get_mut(&mut self.inner) {
         // Wait for the close operation.
         return inner.async_close_op().await;
       }
@@ -84,7 +83,7 @@ impl SharedFd {
     use std::task::Poll;
 
     poll_fn(|cx| {
-      if Rc::<Inner>::strong_count(&self.inner) == 1 {
+      if Arc::<Inner>::strong_count(&self.inner) == 1 {
         return Poll::Ready(());
       }
 

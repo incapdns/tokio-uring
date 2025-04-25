@@ -109,6 +109,9 @@ impl Runtime {
   ///
   /// This takes the tokio-uring [`Builder`](crate::Builder) as a parameter.
   pub fn new(builder: &Builder) -> io::Result<Runtime> {
+    let mut builder = builder.clone();
+    builder.worker_threads = 1;
+
     let mut runtime = Runtime {
       local: ManuallyDrop::new(LocalSet::new()),
       tokio_rt: MaybeUninit::zeroed(),
@@ -130,17 +133,6 @@ impl Runtime {
     let tokio_rt = ManuallyDrop::new(rt);
 
     runtime.tokio_rt = MaybeUninit::new(tokio_rt);
-
-    runtime.start_uring_wakes_task();
-
-    CONTEXT.with(|x| {
-      x.set_handle(Handle::new(builder).expect("Internal error"));
-      x.set_on_thread_park(Runtime::on_thread_park);
-      let mut lock = runtime.contexts.lock().unwrap();
-      lock.push_back(x.clone());
-    });
-
-    runtime.signal.notify_one();
 
     Ok(runtime)
   }
@@ -180,15 +172,12 @@ impl Runtime {
     let async_fd = item.async_fd();
     loop {
       let mut guard = async_fd.readable().await.unwrap();
-      guard.get_inner().context.dispatch_completions();
+      item.context.dispatch_completions();
       guard.clear_ready();
     }
   }
 
   fn start_uring_wakes_task(&self) {
-    //SAFETY: It's always already initialized on Runtime::new method
-    let tokio_rt = unsafe { self.tokio_rt.assume_init_ref() };
-    let _guard = tokio_rt.enter();
     self.local.spawn_local(Runtime::drive_uring_wakes(
       self.contexts.clone(),
       self.signal.clone(),
@@ -237,6 +226,21 @@ impl Runtime {
     F: Future,
   {
     tokio::pin!(future);
+
+    //SAFETY: It's always already initialized on Runtime::new method
+    let tokio_rt = unsafe { self.tokio_rt.assume_init_ref() };
+    let _guard = tokio_rt.enter();
+
+    CONTEXT.with(|x| {
+      x.set_handle(Handle::new(&self.builder).expect("Internal error"));
+      x.set_on_thread_park(Runtime::on_thread_park);
+      let mut lock = self.contexts.lock().unwrap();
+      lock.push_back(x.clone());
+    });
+
+    self.signal.notify_one();
+
+    self.start_uring_wakes_task();
 
     //SAFETY: It's always already initialized on Runtime::new method
     let res = unsafe {

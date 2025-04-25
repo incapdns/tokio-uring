@@ -1,5 +1,5 @@
 use crate::runtime::driver::WeakHandle;
-use crate::runtime::{driver, CONTEXT};
+use crate::runtime::{driver, RuntimeContext, CONTEXT};
 use atomic::Atomic;
 use atomic_wait::{wait, wake_all};
 use bytemuck::NoUninit;
@@ -11,6 +11,7 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use std::{io, mem};
 
@@ -278,6 +279,9 @@ where
 {
   driver: WeakHandle,
 
+  // Strong count to RuntimeContext
+  _context: Arc<RuntimeContext>,
+
   // Per-operation data
   data: Option<T>,
 
@@ -362,8 +366,11 @@ impl From<cqueue::Entry> for CqeResult {
 impl<T: Unpin, CqeType: Unpin> Op<T, CqeType> {
   /// Create a new operation
   pub(super) fn new(driver: WeakHandle, data: T) -> Self {
+    let _context = CONTEXT.with(|x| x.clone());
+
     Op {
       driver,
+      _context,
       lifecycle: ArcMonitor::<Lifecycle>::new(Lifecycle::Initial, 2),
       data: Some(data),
       mutex: spin::Mutex::new(()),
@@ -401,18 +408,16 @@ where
 
     let guard = guard_ref.mutex.lock();
 
-    let result = poll_ref
-      .driver
-      .upgrade()
-      .expect("Not in runtime context")
-      .poll_op(poll_ref, cx);
+    let handle = poll_ref.driver.upgrade().expect("Not in runtime context");
+
+    let result = handle.poll_op(poll_ref, cx);
 
     drop(guard);
 
     /* It's needed because the default local async context
      * don't call on_thread_park, the others worker threads work normal
      */
-    CONTEXT.with(|x| x.call_on_thread_park());
+    handle.call_on_thread_park();
 
     result
   }
@@ -431,15 +436,16 @@ where
 
     let guard = guard_ref.mutex.lock();
 
-    let result = poll_ref
-      .driver
-      .upgrade()
-      .expect("Not in runtime context")
-      .poll_multishot_op(poll_ref, cx);
+    let handle = poll_ref.driver.upgrade().expect("Not in runtime context");
+
+    let result = handle.poll_multishot_op(poll_ref, cx);
 
     drop(guard);
 
-    CONTEXT.with(|x| x.call_on_thread_park());
+    /* It's needed because the default local async context
+     * don't call on_thread_park, the others worker threads work normal
+     */
+    handle.call_on_thread_park();
 
     result
   }
@@ -458,15 +464,16 @@ where
 
     let guard = guard_ref.mutex.lock();
 
-    let result = poll_ref
-      .driver
-      .upgrade()
-      .expect("Not in runtime context")
-      .poll_oneshot_op(poll_ref, cx);
+    let handle = poll_ref.driver.upgrade().expect("Not in runtime context");
+
+    let result = handle.poll_oneshot_op(poll_ref, cx);
 
     drop(guard);
 
-    CONTEXT.with(|x| x.call_on_thread_park());
+    /* It's needed because the default local async context
+     * don't call on_thread_park, the others worker threads work normal
+     */
+    handle.call_on_thread_park();
 
     result
   }
@@ -519,6 +526,8 @@ impl Lifecycle {
           // waker is woken to notify cqe has arrived
           // Note: Maybe defer calling until cqe with !`more` flag set?
           waker.wake();
+        } else {
+          println!("Bugando geral");
         }
       }
 

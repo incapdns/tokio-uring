@@ -4,11 +4,11 @@ use crate::runtime::driver::op::{
 };
 pub(crate) use handle::*;
 use io_uring::{cqueue, opcode, squeue, CompletionQueue, IoUring, SubmissionQueue};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::LinkedList;
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::{io, mem};
 
@@ -28,11 +28,19 @@ pub(crate) struct Driver {
   /// Number of pending operations
   pending_number: AtomicUsize,
 
+  /// Accessing flush
+  accessing_flush: AtomicBool,
+
+  /// On thread park for main thread
+  on_thread_park: Cell<fn()>,
+
   /// Reference to the currently registered buffers.
   /// Ensures that the buffers are not dropped until
   /// after the io-uring runtime has terminated.
-  fixed_buffers: RefCell<Option<Rc<RefCell<dyn FixedBuffers>>>>,
+  fixed_buffers: RefCell<Option<Arc<RefCell<dyn FixedBuffers>>>>,
 }
+
+fn noop() {}
 
 impl Driver {
   pub(crate) fn new(b: &crate::Builder) -> io::Result<Driver> {
@@ -44,6 +52,8 @@ impl Driver {
       accessing_submission_shared: AtomicBool::new(false),
       pending_number: AtomicUsize::new(0),
       fixed_buffers: RefCell::new(None),
+      on_thread_park: Cell::new(noop),
+      accessing_flush: AtomicBool::new(false),
     })
   }
 
@@ -57,9 +67,25 @@ impl Driver {
     self.pending_number.load(Ordering::Acquire)
   }
 
+  pub(crate) fn flush(&self) -> io::Result<usize> {
+    let mut result: io::Result<usize> = Ok(0);
+
+    if self
+      .accessing_flush
+      .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+      .is_ok()
+    {
+      result = self.uring.submit()
+    }
+
+    self.accessing_flush.store(false, Ordering::Relaxed);
+
+    result
+  }
+
   pub(crate) fn submit(&self, sq: &mut SubmissionQueue) -> io::Result<()> {
     loop {
-      match self.uring.submit() {
+      match self.flush() {
         Ok(_) => {
           sq.sync();
           return Ok(());
@@ -100,14 +126,18 @@ impl Driver {
   }
 
   #[inline(always)]
-  fn try_access_completion_shared(&self, callback: impl FnOnce(CompletionQueue)) {
+  fn consume_completion_queue(&self, callback: impl Fn(CompletionQueue)) {
     if self
       .accessing_completion_shared
       .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
       .is_ok()
     {
-      let cq = unsafe { self.uring.completion_shared() };
-      callback(cq);
+      let mut cq = unsafe { self.uring.completion_shared() };
+      while !cq.is_empty() {
+        callback(cq);
+        cq = unsafe { self.uring.completion_shared() };
+      }
+
       self
         .accessing_completion_shared
         .store(false, Ordering::Relaxed);
@@ -129,11 +159,11 @@ impl Driver {
   }
 
   pub(crate) fn dispatch_completions(&self) {
-    self.try_access_completion_shared(|mut cq| {
+    self.consume_completion_queue(|mut cq| {
       cq.sync();
 
       for cqe in cq {
-        if cqe.user_data() == u64::MAX || cqe.user_data() == 0 {
+        if cqe.user_data() == u64::MAX {
           // Result of the cancellation action. There isn't anything we
           // need to do here. We must wait for the CQE for the operation
           // that was canceled.
@@ -170,7 +200,7 @@ impl Driver {
 
   pub(crate) fn register_buffers(
     &mut self,
-    buffers: Rc<RefCell<dyn FixedBuffers>>,
+    buffers: Arc<RefCell<dyn FixedBuffers>>,
   ) -> io::Result<()> {
     let items = buffers.borrow();
 
@@ -364,6 +394,14 @@ impl Driver {
     }
   }
 
+  pub(crate) fn call_on_thread_park(&self) {
+    self.on_thread_park.get()();
+  }
+
+  pub(crate) fn set_on_thread_park(&self, callback: fn()) {
+    self.on_thread_park.set(callback);
+  }
+
   pub(crate) fn poll_multishot_op<T>(
     &self,
     op: &mut Op<T, MultiCQE>,
@@ -426,7 +464,7 @@ impl Drop for Driver {
 
     unsafe {
       let cancel = opcode::AsyncCancel::new(u64::MAX);
-      let sqe = cancel.build().user_data(0).flags(any_flags);
+      let sqe = cancel.build().flags(any_flags).user_data(u64::MAX);
 
       while self.uring.submission().push(&sqe).is_err() {
         self

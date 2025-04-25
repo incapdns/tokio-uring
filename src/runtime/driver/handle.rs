@@ -20,12 +20,12 @@ use std::cell::RefCell;
 use std::io;
 use std::ops::Deref;
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::rc::{Rc, Weak};
+use std::sync::{Arc, Weak};
 use std::task::{Context, Poll};
 
 #[derive(Clone)]
 pub(crate) struct Handle {
-  pub(super) inner: Rc<Driver>,
+  pub(super) inner: Arc<Driver>,
 }
 
 //SAFETY: Handle is only used in RuntimeContext,
@@ -45,7 +45,7 @@ unsafe impl Sync for WeakHandle {}
 impl Handle {
   pub(crate) fn new(b: &crate::Builder) -> io::Result<Self> {
     Ok(Self {
-      inner: Rc::new(Driver::new(b)?),
+      inner: Arc::new(Driver::new(b)?),
     })
   }
 
@@ -59,19 +59,27 @@ impl Handle {
   }
 
   pub(crate) fn flush(&self) -> io::Result<usize> {
-    self.inner.as_ref().uring.submit()
+    self.inner.as_ref().flush()
+  }
+
+  pub(crate) fn call_on_thread_park(&self) {
+    self.inner.as_ref().call_on_thread_park();
+  }
+
+  pub(crate) fn set_on_thread_park(&self, callback: fn()) {
+    self.inner.as_ref().set_on_thread_park(callback);
   }
 
   pub(crate) fn register_buffers(
     &mut self,
-    buffers: Rc<RefCell<dyn FixedBuffers>>,
+    buffers: Arc<RefCell<dyn FixedBuffers>>,
   ) -> io::Result<()> {
-    let inner = Rc::get_mut(&mut self.inner).unwrap();
+    let inner = Arc::get_mut(&mut self.inner).unwrap();
     inner.register_buffers(buffers)
   }
 
   pub(crate) fn unregister_buffers(&mut self) -> io::Result<()> {
-    let inner = Rc::get_mut(&mut self.inner).unwrap();
+    let inner = Arc::get_mut(&mut self.inner).unwrap();
     inner.unregister_buffers()
   }
 
@@ -152,7 +160,7 @@ impl AsRawFd for Handle {
 impl From<Driver> for Handle {
   fn from(driver: Driver) -> Self {
     Self {
-      inner: Rc::new(driver),
+      inner: Arc::new(driver),
     }
   }
 }
@@ -163,7 +171,7 @@ where
 {
   fn from(handle: T) -> Self {
     Self {
-      inner: Rc::downgrade(&handle.inner),
+      inner: Arc::downgrade(&handle.inner),
     }
   }
 }

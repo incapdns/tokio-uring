@@ -1,9 +1,7 @@
 use crate::runtime::driver::{Handle, WeakHandle};
-use std::cell::{Cell, OnceCell, RefCell, RefMut};
+use std::cell::{OnceCell, RefCell, RefMut};
 use std::ops::{Deref, DerefMut};
 use std::os::fd::{AsRawFd, RawFd};
-
-fn noop() {}
 
 pub(crate) struct RefOnceCell<T> {
   cell: OnceCell<T>,
@@ -34,7 +32,6 @@ impl<T> DerefMut for RefOnceCell<T> {
 /// Owns the driver and resides in thread-local storage.
 pub(crate) struct RuntimeContext {
   driver: RefCell<RefOnceCell<Handle>>,
-  on_thread_park: Cell<fn()>,
 }
 
 impl RuntimeContext {
@@ -42,7 +39,6 @@ impl RuntimeContext {
   pub(crate) fn new() -> RuntimeContext {
     RuntimeContext {
       driver: RefCell::new(Default::default()),
-      on_thread_park: Cell::new(noop),
     }
   }
 
@@ -65,13 +61,10 @@ impl RuntimeContext {
     let _ = roc.flush();
   }
 
-  #[inline(always)]
-  pub(crate) fn call_on_thread_park(&self) {
-    self.on_thread_park.get()();
-  }
-
   pub(crate) fn set_on_thread_park(&self, callback: fn()) {
-    self.on_thread_park.set(callback)
+    let roc = unsafe { &*self.driver.as_ptr() };
+
+    roc.set_on_thread_park(callback)
   }
 
   /// Initialize the driver.

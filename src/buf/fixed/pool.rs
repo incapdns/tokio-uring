@@ -16,7 +16,6 @@ use crate::buf::fixed::handle::CheckedOutBuf;
 use crate::buf::fixed::plumbing::Pool;
 use crate::buf::fixed::shared::{process, register, unregister};
 use std::io;
-use std::rc::Rc;
 use std::sync::Arc;
 use tokio::pin;
 use tokio::sync::Notify;
@@ -95,7 +94,7 @@ use tokio::sync::Notify;
 /// ```
 #[derive(Clone)]
 pub struct FixedBufPool<T: IoBufMut> {
-  inner: RefCell<Rc<RefCell<plumbing::Pool<T>>>>,
+  inner: RefCell<Arc<RefCell<plumbing::Pool<T>>>>,
 }
 
 impl<T: IoBufMut> FixedBufPool<T> {
@@ -164,7 +163,7 @@ impl<T: IoBufMut> FixedBufPool<T> {
   /// ```
   pub fn new(bufs: impl IntoIterator<Item = T>) -> Self {
     FixedBufPool {
-      inner: RefCell::new(Rc::new(RefCell::new(Pool::new(bufs.into_iter())))),
+      inner: RefCell::new(Arc::new(RefCell::new(Pool::new(bufs.into_iter())))),
     }
   }
 
@@ -258,7 +257,7 @@ impl<T: IoBufMut> FixedBufPool<T> {
     self.next_when_notified(cap, notify).await
   }
 
-  fn get_fixed_buf(inner: Rc<RefCell<Pool<T>>>, data: CheckedOutBuf) -> FixedBuf {
+  fn get_fixed_buf(inner: Arc<RefCell<Pool<T>>>, data: CheckedOutBuf) -> FixedBuf {
     // Safety: the validity of buffer data is ensured by
     // plumbing::Pool::try_next
     unsafe { FixedBuf::new(inner, data) }

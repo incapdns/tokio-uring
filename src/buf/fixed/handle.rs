@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use libc::iovec;
 use std::fmt::{self, Debug};
 use std::ops::{Deref, DerefMut};
-use std::rc::Rc;
+use std::sync::Arc;
 
 // Data to construct a `FixedBuf` handle from.
 pub(crate) struct CheckedOutBuf {
@@ -32,7 +32,7 @@ pub(crate) struct CheckedOutBuf {
 /// [`FixedBufPool`]:     super::FixedBufPool
 ///
 pub struct FixedBuf {
-  registry: Rc<RefCell<dyn FixedBuffers>>,
+  registry: Arc<RefCell<dyn FixedBuffers>>,
   buf: CheckedOutBuf,
 }
 
@@ -57,7 +57,7 @@ impl FixedBuf {
   // - the array will not be deallocated until the buffer is checked in;
   // - the data in the array must be initialized up to the number of bytes
   //   given in init_len.
-  pub(super) unsafe fn new(registry: Rc<RefCell<dyn FixedBuffers>>, buf: CheckedOutBuf) -> Self {
+  pub(super) unsafe fn new(registry: Arc<RefCell<dyn FixedBuffers>>, buf: CheckedOutBuf) -> Self {
     FixedBuf { registry, buf }
   }
 

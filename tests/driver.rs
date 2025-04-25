@@ -1,3 +1,5 @@
+use std::sync::atomic::AtomicU32;
+use std::sync::Arc;
 use tempfile::NamedTempFile;
 
 use tokio_uring::{buf::IoBuf, fs::File};
@@ -106,35 +108,67 @@ fn too_many_submissions() {
 }
 
 #[test]
+fn completion_overflow_lightweight() {
+  let mut builder = tokio_uring::uring_builder();
+  let builder = builder.setup_cqsize(400);
+  internal_completion_overflow(false, 20000, 200, builder.clone());
+}
+
+#[test]
 fn completion_overflow() {
+  let mut builder = tokio_uring::uring_builder();
+  let builder = builder.setup_cqsize(4);
+  internal_completion_overflow(true, 2000, 2, builder.clone());
+}
+
+fn internal_completion_overflow(
+  has_timer: bool,
+  spawn_cnt: u32,
+  entries: u32,
+  builder: io_uring::Builder,
+) {
   use std::process;
   use std::{thread, time};
   use tokio::task::JoinSet;
 
-  let spawn_cnt = 2000;
-  let squeue_entries = 2;
-  let cqueue_entries = 2 * squeue_entries;
+  for _ in 1..20 {
+    let total = Arc::new(AtomicU32::new(0));
+    let total_rt = total.clone();
 
-  thread::spawn(|| {
-    thread::sleep(time::Duration::from_secs(8)); // 1000 times longer than it takes on a slow machine
-    eprintln!("Timeout reached. The uring completions are hung.");
-    process::exit(1);
-  });
+    if has_timer {
+      thread::spawn(move || {
+        thread::sleep(time::Duration::from_millis(1000)); // 1000 times longer than it takes on a slow machine
+        let finished = total.load(atomic::Ordering::Acquire);
+        if finished != (spawn_cnt * 2) {
+          eprintln!(
+            "Timeout reached ({}). The uring completions are hung.",
+            finished
+          );
+          process::exit(1);
+        }
+      });
+    }
 
-  tokio_uring::builder()
-    .entries(squeue_entries)
-    .uring_builder(tokio_uring::uring_builder().setup_cqsize(cqueue_entries))
-    .start(async move {
-      let mut js = JoinSet::new();
+    tokio_uring::builder()
+      .entries(entries)
+      .uring_builder(&builder)
+      .start(async move {
+        let mut js = JoinSet::new();
 
-      for _ in 0..spawn_cnt {
-        js.spawn_local(tokio_uring::no_op());
-      }
+        for _ in 0..spawn_cnt {
+          js.spawn_local(tokio_uring::no_op());
+        }
 
-      while let Some(res) = js.join_next().await {
-        let _ = res.unwrap().unwrap();
-      }
-    });
+        for _ in 0..spawn_cnt {
+          js.spawn(tokio_uring::no_op());
+        }
+
+        while let Some(res) = js.join_next().await {
+          let _ = res.unwrap().unwrap();
+          total_rt.fetch_add(1, atomic::Ordering::Release);
+        }
+      });
+  }
 }
 
 fn tempfile() -> NamedTempFile {
