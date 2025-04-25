@@ -40,6 +40,9 @@ pub(crate) struct Driver {
   fixed_buffers: RefCell<Option<Arc<RefCell<dyn FixedBuffers>>>>,
 }
 
+unsafe impl Send for Driver {}
+unsafe impl Sync for Driver {}
+
 fn noop() {}
 
 impl Driver {
